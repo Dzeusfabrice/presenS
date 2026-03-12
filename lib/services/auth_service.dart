@@ -33,16 +33,20 @@ class AuthService {
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        final message = data['message'] ?? 
+        final message =
+            data['message'] ??
             "Un email de réinitialisation a été envoyé à votre adresse.";
         AppUtils.showSuccessToast(message);
         return true;
       } else {
-        print('Forgot password failed [${response.statusCode}]: ${response.body}');
+        print(
+          'Forgot password failed [${response.statusCode}]: ${response.body}',
+        );
         try {
           final errorData = jsonDecode(response.body);
-          final errorMsg = errorData['message'] ?? 
-              errorData['error'] ?? 
+          final errorMsg =
+              errorData['message'] ??
+              errorData['error'] ??
               "Erreur lors de la demande de réinitialisation";
           AppUtils.showErrorToast(errorMsg);
         } catch (_) {
@@ -71,24 +75,25 @@ class AuthService {
       final response = await _client.post(
         Uri.parse(ApiEndpoints.resetPassword),
         headers: ApiEndpoints.getHeaders(),
-        body: jsonEncode({
-          'token': token,
-          'password': newPassword,
-        }),
+        body: jsonEncode({'token': token, 'password': newPassword}),
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        final message = data['message'] ?? 
+        final message =
+            data['message'] ??
             "Votre mot de passe a été réinitialisé avec succès.";
         AppUtils.showSuccessToast(message);
         return true;
       } else {
-        print('Reset password failed [${response.statusCode}]: ${response.body}');
+        print(
+          'Reset password failed [${response.statusCode}]: ${response.body}',
+        );
         try {
           final errorData = jsonDecode(response.body);
-          final errorMsg = errorData['message'] ?? 
-              errorData['error'] ?? 
+          final errorMsg =
+              errorData['message'] ??
+              errorData['error'] ??
               "Erreur lors de la réinitialisation";
           AppUtils.showErrorToast(errorMsg);
         } catch (_) {
@@ -825,14 +830,13 @@ class AuthService {
       final token = await _getToken();
 
       // Préparer le JSON avec le format attendu par l'API
-      // Le backend attend 'classe_id' (une seule classe)
-      // On envoie la première classe sélectionnée
+      // Le backend attend désormais une liste de classes (`classe_ids`)
+      // plutôt qu'une seule classe. On envoie l'intégralité de la sélection.
       final Map<String, dynamic> sessionJson = {
         'matiere': session.matiere,
         'enseignant_id': session.enseignantId,
         'lieu_id': session.lieuId,
-        'classe_id':
-            session.classeIds.isNotEmpty ? session.classeIds.first : '',
+        'classe_ids': session.classeIds,
         'mode': session.mode.name,
         'marge_tolerance': session.margeTolerance,
         if (session.qrCode != null) 'qr_code': session.qrCode,

@@ -15,6 +15,7 @@ class SessionModel {
   final DateTime? heureFin;
   final int? margeTolerance;
   final String? qrCode;
+  final String? fullName;
 
   SessionModel({
     required this.id,
@@ -29,6 +30,7 @@ class SessionModel {
     this.heureFin,
     this.margeTolerance,
     this.qrCode,
+    this.fullName,
   });
 
   factory SessionModel.fromJson(Map<String, dynamic> json) {
@@ -63,6 +65,7 @@ class SessionModel {
       heureFin: _parseDateTime(json['heure_fin'] ?? json['heureFin']),
       margeTolerance: json['marge_tolerance'],
       qrCode: json['qr_code'],
+      fullName: json['nom_complet']
     );
   }
 

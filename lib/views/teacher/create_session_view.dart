@@ -255,7 +255,7 @@ class _CreateSessionViewState extends State<CreateSessionView> {
                     );
                     return Chip(
                       label: Text(
-                        cls?.nom ?? id,
+                        cls?.fullName ?? cls?.nom ?? id,
                         style: const TextStyle(fontSize: 12),
                       ),
                       deleteIcon: const Icon(Icons.close, size: 16),
@@ -280,7 +280,7 @@ class _CreateSessionViewState extends State<CreateSessionView> {
             items:
                 _authController.locations.map((loc) {
                   return DropdownMenuItem(value: loc.id, child: Text(loc.name));
-                }).toList(),
+                }).toList(), 
             onChanged: (val) => setState(() => _selectedLieuId = val),
           ),
         ),
@@ -593,7 +593,7 @@ class _CreateSessionViewState extends State<CreateSessionView> {
                             });
                           },
                           title: Text(
-                            cls.nom,
+                            cls.fullName ?? cls.nom,
                             style: TextStyle(
                               fontWeight:
                                   isChecked

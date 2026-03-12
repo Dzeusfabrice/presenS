@@ -1,6 +1,6 @@
 class ApiEndpoints {
-  static const String baseUrl =
-      "https://attendance-backend.basilo-store-api.workers.dev";
+  static const String baseUrl ="https://attendance-backend.presens-app-backend.workers.dev";
+    //   "https://attendance-backend.basilo-store-api.workers.dev";
 
   // --- AUTH ---
   static const String register = "$baseUrl/auth/register";
