@@ -9,10 +9,10 @@ class UserManagementController extends GetxController {
   var usersList = <UserModel>[].obs;
   var locations = <dynamic>[].obs;
   var classes = <dynamic>[].obs;
-  var selectedClassFilter = Rxn<String>(
-    null,
-  ); // Filtre par classe pour les étudiants
-  var searchQuery = ''.obs; // Texte de recherche
+  var selectedClassFilter = Rxn<String>(null);
+  var selectedFiliereFilter = Rxn<String>(null);
+  var selectedLevelFilter = Rxn<String>(null);
+  var searchQuery = ''.obs;
 
   @override
   void onInit() {

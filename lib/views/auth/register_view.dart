@@ -37,6 +37,9 @@ class _RegisterViewState extends State<RegisterView>
   late AnimationController _mainController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+  
+  String? _selectedFiliereId;
+  String? _selectedLevelId;
 
   @override
   void initState() {
@@ -59,6 +62,8 @@ class _RegisterViewState extends State<RegisterView>
       ),
     );
     _mainController.forward();
+    _mainController.forward();
+    _authController.fetchAcademicData();
     _authController.fetchClasses();
   }
 
@@ -574,17 +579,95 @@ class _RegisterViewState extends State<RegisterView>
   }
 
   Widget _step2(bool isMobile) {
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          _AppTextField(
+            controller: _matriculeController,
+            label: "Matricule",
+            hint: "Votre numéro matricule",
+            icon: Icons.badge_outlined,
+            isMobile: isMobile,
+          ),
+          SizedBox(height: isMobile ? 14 : 16),
+          _buildFilterDropdowns(isMobile),
+          SizedBox(height: isMobile ? 14 : 16),
+          _buildGlassDropdown(isMobile),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterDropdowns(bool isMobile) {
     return Column(
       children: [
-        _AppTextField(
-          controller: _matriculeController,
-          label: "Matricule",
-          hint: "Votre numéro matricule",
-          icon: Icons.badge_outlined,
+        Obx(() => _buildSimpleDropdown(
+          label: "Filière",
+          value: _selectedFiliereId,
+          hint: "Filtrer par filière",
+          items: _authController.filieres.map((f) => DropdownMenuItem(
+            value: f.id,
+            child: Text(f.nom, style: GoogleFonts.outfit(fontSize: 14)),
+          )).toList(),
+          onChanged: (val) => setState(() => _selectedFiliereId = val),
           isMobile: isMobile,
+        )),
+        SizedBox(height: isMobile ? 12 : 14),
+        Obx(() => _buildSimpleDropdown(
+          label: "Niveau",
+          value: _selectedLevelId,
+          hint: "Filtrer par niveau",
+          items: _authController.levels.map((l) => DropdownMenuItem(
+            value: l.id,
+            child: Text(l.nom, style: GoogleFonts.outfit(fontSize: 14)),
+          )).toList(),
+          onChanged: (val) => setState(() => _selectedLevelId = val),
+          isMobile: isMobile,
+        )),
+      ],
+    );
+  }
+
+  Widget _buildSimpleDropdown({
+    required String label,
+    required String? value,
+    required String hint,
+    required List<DropdownMenuItem<String>> items,
+    required void Function(String?) onChanged,
+    required bool isMobile,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 6),
+          child: Text(
+            label,
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary.withOpacity(0.7),
+            ),
+          ),
         ),
-        SizedBox(height: isMobile ? 14 : 16),
-        _buildGlassDropdown(isMobile),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: AppColors.backgroundGrey.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.grey300.withOpacity(0.8)),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              isExpanded: true,
+              hint: Text(hint, style: GoogleFonts.outfit(fontSize: 14, color: AppColors.textSecondary.withOpacity(0.5))),
+              items: items,
+              onChanged: onChanged,
+              borderRadius: BorderRadius.circular(18),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -605,7 +688,19 @@ class _RegisterViewState extends State<RegisterView>
           ),
         ),
         Obx(() {
-          final classes = _authController.classes;
+          var classes = _authController.classes;
+          
+          // Appliquer les filtres
+          if (_selectedFiliereId != null) {
+            classes = classes.where((c) => c.filiereId == _selectedFiliereId).toList().obs;
+          }
+          if (_selectedLevelId != null) {
+            final levelNom = _authController.levels.firstWhereOrNull((l) => l.id == _selectedLevelId)?.nom;
+            if (levelNom != null) {
+              classes = classes.where((c) => c.niveau == levelNom).toList().obs;
+            }
+          }
+
           final isLoading = _authController.isLoading.value;
 
           if (isLoading) {

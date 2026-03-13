@@ -19,9 +19,9 @@ class _CreateSessionViewState extends State<CreateSessionView> {
   final SessionController _sessionController = Get.find<SessionController>();
   final AuthController _authController = Get.find<AuthController>();
 
-  final _matiereController = TextEditingController();
   final _toleranceController = TextEditingController(text: "15");
   String? _selectedLieuId;
+  String? _selectedMatterId;
   final List<String> _selectedClasseIds = [];
   SessionMode _selectedMode = SessionMode.GPS;
 
@@ -192,10 +192,20 @@ class _CreateSessionViewState extends State<CreateSessionView> {
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 20),
-        _buildLabel("Nom de la matière"),
-        TextField(
-          controller: _matiereController,
-          decoration: _inputDecoration("Ex: Fondements du Cloud"),
+        _buildLabel("Matière"),
+        Obx(
+          () => DropdownButtonFormField<String>(
+            value: _selectedMatterId,
+            decoration: _inputDecoration("Sélectionner la matière"),
+            items:
+                _authController.matters.map((matter) {
+                  return DropdownMenuItem(
+                    value: matter.id,
+                    child: Text(matter.nom),
+                  );
+                }).toList(),
+            onChanged: (val) => setState(() => _selectedMatterId = val),
+          ),
         ),
         const SizedBox(height: 16),
         _buildLabel("Classes concernées"),
@@ -494,8 +504,8 @@ class _CreateSessionViewState extends State<CreateSessionView> {
 
   bool _validateCurrentStep() {
     if (_currentStep == 0) {
-      if (_matiereController.text.trim().isEmpty) {
-        AppUtils.showErrorToast("Veuillez saisir le nom de la matière");
+      if (_selectedMatterId == null) {
+        AppUtils.showErrorToast("Veuillez sélectionner une matière");
         return false;
       }
       if (_selectedClasseIds.isEmpty) {
@@ -687,7 +697,7 @@ class _CreateSessionViewState extends State<CreateSessionView> {
   }
 
   Future<void> _handleSubmit() async {
-    if (_matiereController.text.isEmpty ||
+    if (_selectedMatterId == null ||
         _selectedLieuId == null ||
         _selectedClasseIds.isEmpty ||
         _heureDebut == null ||
@@ -704,7 +714,11 @@ class _CreateSessionViewState extends State<CreateSessionView> {
     int margeTol = int.tryParse(_toleranceController.text) ?? 15;
 
     final success = await _sessionController.createSession(
-      matiere: _matiereController.text.trim(),
+      matiereId: _selectedMatterId,
+      matiere:
+          _authController.matters
+              .firstWhere((m) => m.id == _selectedMatterId)
+              .nom,
       lieuId: _selectedLieuId!,
       classeIds: _selectedClasseIds,
       mode: _selectedMode,

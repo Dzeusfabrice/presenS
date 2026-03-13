@@ -5,6 +5,8 @@ import '../../core/theme/app_colors.dart';
 import '../../models/user_model.dart';
 import '../../models/attendance_model.dart';
 import '../../models/class_model.dart';
+import 'package:geolocator/geolocator.dart';
+import 'session_recap_view.dart';
 
 class ClassAttendanceMonitorView extends StatefulWidget {
   final String sessionId;
@@ -25,6 +27,8 @@ class ClassAttendanceMonitorView extends StatefulWidget {
 class _ClassAttendanceMonitorViewState extends State<ClassAttendanceMonitorView> {
   final AttendanceController _attendanceController = Get.find<AttendanceController>();
   final RxMap<String, AttendanceStatus> _pendingChanges = <String, AttendanceStatus>{}.obs;
+  final TextEditingController _searchController = TextEditingController();
+  final RxString _searchQuery = "".obs;
   bool _isSaving = false;
 
   @override
@@ -32,9 +36,19 @@ class _ClassAttendanceMonitorViewState extends State<ClassAttendanceMonitorView>
     return Scaffold(
       backgroundColor: AppColors.backgroundGrey,
       appBar: AppBar(
-        title: Text(
-          "${widget.classModel.nom} ${widget.classModel.niveau}",
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.classModel.nom,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            if (widget.classModel.parcours.isNotEmpty)
+              Text(
+                widget.classModel.parcours,
+                style: const TextStyle(fontSize: 11, color: Colors.white70),
+              ),
+          ],
         ),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
@@ -53,9 +67,10 @@ class _ClassAttendanceMonitorViewState extends State<ClassAttendanceMonitorView>
       body: Column(
         children: [
           _buildClassStatsHeader(),
+          _buildSearchBar(),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: _buildAttendanceSheet(),
             ),
           ),
@@ -124,6 +139,27 @@ class _ClassAttendanceMonitorViewState extends State<ClassAttendanceMonitorView>
     );
   }
 
+  Widget _buildSearchBar() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: TextField(
+        controller: _searchController,
+        onChanged: (val) => _searchQuery.value = val,
+        decoration: InputDecoration(
+          hintText: "Rechercher un étudiant...",
+          prefixIcon: const Icon(Icons.search, size: 20),
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 0),
+        ),
+      ),
+    );
+  }
+
   Widget _buildAttendanceSheet() {
     return Container(
       decoration: BoxDecoration(
@@ -166,11 +202,17 @@ class _ClassAttendanceMonitorViewState extends State<ClassAttendanceMonitorView>
           Expanded(
             child: Obx(() {
               final attendancesList = _attendanceController.attendances.toList();
+              final query = _searchQuery.value.toLowerCase();
               
+              final filteredStudents = widget.students.where((s) {
+                final fullName = "${s.nom} ${s.prenom}".toLowerCase();
+                return fullName.contains(query) || (s.matricule?.toLowerCase().contains(query) ?? false);
+              }).toList();
+
               return ListView.builder(
-                itemCount: widget.students.length,
+                itemCount: filteredStudents.length,
                 itemBuilder: (context, index) {
-                  final student = widget.students[index];
+                  final student = filteredStudents[index];
                   
                   // Utiliser le changement en attente s'il existe, sinon l'état réel
                   final pendingStatus = _pendingChanges[student.id];
@@ -285,11 +327,27 @@ class _ClassAttendanceMonitorViewState extends State<ClassAttendanceMonitorView>
     setState(() => _isSaving = true);
     
     try {
+      double? lat;
+      double? lon;
+      
+      try {
+        final position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 5),
+        );
+        lat = position.latitude;
+        lon = position.longitude;
+      } catch (e) {
+        print("Could not get location for bulk marking: $e");
+      }
+
       final changes = Map<String, AttendanceStatus>.from(_pendingChanges);
       
       final success = await _attendanceController.updateBulkManualStatus(
         sessionId: widget.sessionId,
         changes: changes,
+        lat: lat,
+        lon: lon,
       );
       
       if (success) {
@@ -297,8 +355,8 @@ class _ClassAttendanceMonitorViewState extends State<ClassAttendanceMonitorView>
         Get.snackbar("Succès", "L'appel a été mis à jour avec succès", 
           backgroundColor: Colors.green, colorText: Colors.white, snackPosition: SnackPosition.BOTTOM);
         
-        // Retour au moniteur live pour pouvoir sélectionner une autre classe si besoin
-        Get.back();
+        // Redirection vers le récapitulatif comme demandé
+        Get.off(() => SessionRecapView(sessionId: widget.sessionId));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);

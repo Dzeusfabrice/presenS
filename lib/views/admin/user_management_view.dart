@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import '../../controllers/user_management_controller.dart';
+import '../../controllers/auth_controller.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_utils.dart';
 import '../../core/widgets/app_modal.dart';
@@ -20,15 +21,19 @@ class UserManagementView extends StatefulWidget {
 class _UserManagementViewState extends State<UserManagementView>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final UserManagementController controller = Get.put(
-    UserManagementController(),
-  );
+  final UserManagementController controller = Get.put(UserManagementController());
+  final AuthController _authController = Get.find<AuthController>();
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) {
+        setState(() {});
+      }
+    });
   }
 
   @override
@@ -51,25 +56,20 @@ class _UserManagementViewState extends State<UserManagementView>
         elevation: 0,
         foregroundColor: AppColors.textPrimary,
         actions: [
-          Obx(
-            () =>
-                _tabController.index == 1
-                    ? PopupMenuButton<String>(
-                      onSelected: (value) {
-                        if (value == 'import_csv') {
-                          _importStudentsFromCSV(context);
-                        }
-                      },
-                      itemBuilder:
-                          (BuildContext context) => [
-                            const PopupMenuItem<String>(
-                              value: 'import_csv',
-                              child: Text('Importer CSV Étudiants'),
-                            ),
-                          ],
-                    )
-                    : const SizedBox.shrink(),
-          ),
+          if (_tabController.index == 1)
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'import_csv') {
+                  _importStudentsFromCSV(context);
+                }
+              },
+              itemBuilder: (BuildContext context) => [
+                const PopupMenuItem<String>(
+                  value: 'import_csv',
+                  child: Text('Importer CSV Étudiants'),
+                ),
+              ],
+            ),
         ],
         bottom: TabBar(
           controller: _tabController,
@@ -110,35 +110,36 @@ class _UserManagementViewState extends State<UserManagementView>
           controller.usersList.where((u) => u.role == role).toList();
 
       // Si c'est un étudiant et qu'un filtre de classe est sélectionné, filtrer par classe
-      if (role == UserRole.ETUDIANT &&
-          controller.selectedClassFilter.value != null) {
-        filteredUsers =
-            filteredUsers
-                .where(
-                  (u) => u.classeId == controller.selectedClassFilter.value,
-                )
-                .toList();
+      // Filtrer par filière
+      if (role == UserRole.ETUDIANT && controller.selectedFiliereFilter.value != null) {
+        filteredUsers = filteredUsers.where((u) {
+          final cls = controller.classes.firstWhereOrNull((c) => c.id == u.classeId) as ClassModel?;
+          return cls?.filiereId == controller.selectedFiliereFilter.value;
+        }).toList();
       }
 
-      // Appliquer la recherche si un texte est saisi
+      // Filtrer par niveau
+      if (role == UserRole.ETUDIANT && controller.selectedLevelFilter.value != null) {
+        filteredUsers = filteredUsers.where((u) {
+          final cls = controller.classes.firstWhereOrNull((c) => c.id == u.classeId) as ClassModel?;
+          return cls?.niveauId == controller.selectedLevelFilter.value;
+        }).toList();
+      }
+
+      // Si c'est un étudiant et qu'un filtre de classe est sélectionné
+      if (role == UserRole.ETUDIANT && controller.selectedClassFilter.value != null) {
+        filteredUsers = filteredUsers.where((u) => u.classeId == controller.selectedClassFilter.value).toList();
+      }
+
+      // Appliquer la recherche
       if (controller.searchQuery.value.isNotEmpty) {
         final query = controller.searchQuery.value.toLowerCase().trim();
-        filteredUsers =
-            filteredUsers.where((u) {
-              final nom = u.nom.toLowerCase();
-              final prenom = u.prenom.toLowerCase();
-              final email = u.email.toLowerCase();
-              final matricule = (u.matricule ?? '').toLowerCase();
-              final matriculeEnseignant =
-                  (u.matriculeEnseignant ?? '').toLowerCase();
-
-              return nom.contains(query) ||
-                  prenom.contains(query) ||
-                  email.contains(query) ||
-                  matricule.contains(query) ||
-                  matriculeEnseignant.contains(query) ||
-                  "$nom $prenom".contains(query);
-            }).toList();
+        filteredUsers = filteredUsers.where((u) {
+          return u.nom.toLowerCase().contains(query) ||
+                 u.prenom.toLowerCase().contains(query) ||
+                 (u.matricule ?? '').toLowerCase().contains(query) ||
+                 u.email.toLowerCase().contains(query);
+        }).toList();
       }
 
       return Column(
@@ -204,38 +205,76 @@ class _UserManagementViewState extends State<UserManagementView>
                   ),
                 ),
 
-                // Class Filters for Students
+                // Academic Filters for Students
                 if (role == UserRole.ETUDIANT) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildMiniDropdown(
+                          hint: "Filière",
+                          value: controller.selectedFiliereFilter.value,
+                          items: _authController.filieres.map((f) => DropdownMenuItem(value: f.id, child: Text(f.nom))).toList(),
+                          onChanged: (val) {
+                            controller.selectedFiliereFilter.value = val;
+                            controller.selectedClassFilter.value = null;
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildMiniDropdown(
+                          hint: "Niveau",
+                          value: controller.selectedLevelFilter.value,
+                          items: _authController.levels.map((l) => DropdownMenuItem(value: l.id, child: Text(l.nom))).toList(),
+                          onChanged: (val) {
+                            controller.selectedLevelFilter.value = val;
+                            controller.selectedClassFilter.value = null;
+                          },
+                        ),
+                      ),
+                      if (controller.selectedFiliereFilter.value != null || controller.selectedLevelFilter.value != null)
+                        IconButton(
+                          icon: const Icon(Icons.filter_list_off, size: 20),
+                          onPressed: () {
+                            controller.selectedFiliereFilter.value = null;
+                            controller.selectedLevelFilter.value = null;
+                            controller.selectedClassFilter.value = null;
+                          },
+                        ),
+                    ],
+                  ),
                   const SizedBox(height: 12),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     physics: const BouncingScrollPhysics(),
                     child: Row(
                       children: [
-                        // "All" Chip
                         _buildFilterChip(
                           label: "Toutes les classes",
-                          isSelected:
-                              controller.selectedClassFilter.value == null,
-                          onSelected:
-                              (val) =>
-                                  controller.selectedClassFilter.value = null,
+                          isSelected: controller.selectedClassFilter.value == null,
+                          onSelected: (val) => controller.selectedClassFilter.value = null,
                         ),
                         const SizedBox(width: 8),
-                        // Class list from controller
-                        ...controller.classes.map((dynamic item) {
+                        ...controller.classes.where((c) {
+                          final cls = c as ClassModel;
+                          bool match = true;
+                          if (controller.selectedFiliereFilter.value != null) {
+                            match = match && cls.filiereId == controller.selectedFiliereFilter.value;
+                          }
+                          if (controller.selectedLevelFilter.value != null) {
+                            match = match && cls.niveauId == controller.selectedLevelFilter.value;
+                          }
+                          return match;
+                        }).map((dynamic item) {
                           final cls = item as ClassModel;
-                          final isSelected =
-                              controller.selectedClassFilter.value == cls.id;
+                          final isSelected = controller.selectedClassFilter.value == cls.id;
                           return Padding(
                             padding: const EdgeInsets.only(right: 8),
                             child: _buildFilterChip(
                               label: cls.nom,
                               isSelected: isSelected,
-                              onSelected:
-                                  (val) =>
-                                      controller.selectedClassFilter.value =
-                                          val ? cls.id : null,
+                              onSelected: (val) => controller.selectedClassFilter.value = val ? cls.id : null,
                             ),
                           );
                         }).toList(),
@@ -1094,6 +1133,34 @@ class _UserManagementViewState extends State<UserManagementView>
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildMiniDropdown({
+    required String hint,
+    required String? value,
+    required List<DropdownMenuItem<String>> items,
+    required void Function(String?) onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundGrey,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border.withOpacity(0.5)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isExpanded: true,
+          hint: Text(hint, style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+          items: items,
+          onChanged: onChanged,
+          style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textPrimary),
+          borderRadius: BorderRadius.circular(10),
+          icon: const Icon(Icons.arrow_drop_down, size: 20),
+        ),
+      ),
     );
   }
 

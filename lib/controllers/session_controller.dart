@@ -104,6 +104,7 @@ class SessionController extends GetxController {
   }
 
   Future<bool> createSession({
+    String? matiereId,
     required String matiere,
     required String lieuId,
     required List<String> classeIds,
@@ -116,6 +117,7 @@ class SessionController extends GetxController {
     try {
       final newSession = SessionModel(
         id: "sess-${DateTime.now().millisecondsSinceEpoch}",
+        matiereId: matiereId,
         matiere: matiere,
         enseignantId: _authController.user.value?.id ?? "unknown",
         lieuId: lieuId,

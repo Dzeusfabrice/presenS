@@ -6,6 +6,7 @@ enum SessionStatus { ATTENTE, EN_COURS, CLOS }
 
 class SessionModel {
   final String id;
+  final String? matiereId;
   final String matiere;
   final String enseignantId;
   final String lieuId;
@@ -22,6 +23,7 @@ class SessionModel {
 
   SessionModel({
     required this.id,
+    this.matiereId,
     required this.matiere,
     required this.enseignantId,
     required this.lieuId,
@@ -77,7 +79,8 @@ class SessionModel {
 
     return SessionModel(
       id: json['id'] ?? '',
-      matiere: json['matiere'] ?? '',
+      matiereId: json['matiere_id'],
+      matiere: json['matiere'] ?? json['nom_matiere'] ?? '',
       enseignantId: json['enseignant_id'] ?? '',
       lieuId: json['lieu_id'] ?? '',
       classeIds: classesIds,

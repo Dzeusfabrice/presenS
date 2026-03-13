@@ -28,8 +28,16 @@ class ApiEndpoints {
   static String sessionById(String id) => "$baseUrl/sessions/$id";
   static String sessionStatus(String id) => "$baseUrl/sessions/$id/status";
 
+  // --- ACADEMIC DATA ---
+  static const String academicYears = "$baseUrl/annees";
+  static const String filieres = "$baseUrl/filieres";
+  static const String levels = "$baseUrl/niveaux";
+  static String parcoursByFiliere(String filiereId) => "$baseUrl/parcours?filiere_id=$filiereId";
+  static const String matters = "$baseUrl/matieres";
+
   // --- ATTENDANCE ---
   static const String attendanceMark = "$baseUrl/attendance/mark";
+  static const String attendanceBulk = "$baseUrl/attendance/bulk";
   static String attendanceBySession(String sessionId) =>
       "$baseUrl/attendance/session/$sessionId";
   static String attendanceByStudent(String studentId) =>

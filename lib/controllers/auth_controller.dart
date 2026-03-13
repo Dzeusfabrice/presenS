@@ -5,6 +5,7 @@ import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../models/location_model.dart';
 import '../models/class_model.dart';
+import '../models/academic_models.dart';
 import '../core/utils/app_utils.dart';
 import 'session_controller.dart';
 import 'attendance_controller.dart';
@@ -16,6 +17,24 @@ class AuthController extends GetxController {
   var user = Rxn<UserModel>();
   var locations = <LocationModel>[].obs;
   var classes = <ClassModel>[].obs;
+  
+  // Academic Data
+  var academicYears = <AcademicYearModel>[].obs;
+  var filieres = <FiliereModel>[].obs;
+  var levels = <LevelModel>[].obs;
+  var parcours = <ParcoursModel>[].obs;
+  var matters = <MatterModel>[].obs;
+
+  Future<void> fetchAcademicData() async {
+    academicYears.assignAll(await _authService.getAcademicYears());
+    filieres.assignAll(await _authService.getFilieres());
+    levels.assignAll(await _authService.getLevels());
+    matters.assignAll(await _authService.getMatters());
+  }
+
+  Future<void> fetchParcours(String filiereId) async {
+    parcours.assignAll(await _authService.getParcours(filiereId));
+  }
 
   @override
   void onInit() {
@@ -23,6 +42,7 @@ class AuthController extends GetxController {
     checkAuth();
     loadCachedClasses();
     fetchLocations();
+    fetchAcademicData(); // Nouveau
   }
 
   Future<void> checkAuth() async {

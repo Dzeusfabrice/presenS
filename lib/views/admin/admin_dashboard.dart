@@ -11,6 +11,7 @@ import 'location_management_view.dart';
 import 'class_management_view.dart';
 import 'export_management_view.dart';
 import 'settings_management_view.dart';
+import 'academic_reference_view.dart';
 
 class AdminDashboard extends StatelessWidget {
   const AdminDashboard({Key? key}) : super(key: key);
@@ -374,6 +375,13 @@ class AdminDashboard extends StatelessWidget {
         subtitle: "Groupes d'élèves",
         color: Colors.green,
         onTap: () => Get.to(() => const ClassManagementView()),
+      ),
+      _MenuItemData(
+        icon: Icons.history_edu_rounded,
+        title: "Configuration",
+        subtitle: "Données académiques",
+        color: Colors.indigo,
+        onTap: () => Get.to(() => const AcademicReferenceView()),
       ),
       _MenuItemData(
         icon: Icons.file_download_rounded,

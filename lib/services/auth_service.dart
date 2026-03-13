@@ -10,6 +10,7 @@ import '../models/location_model.dart';
 import '../models/session_model.dart';
 import '../models/attendance_model.dart';
 import '../models/class_model.dart';
+import '../models/academic_models.dart';
 import 'mock_data_service.dart';
 
 class AuthService {
@@ -866,7 +867,8 @@ class AuthService {
       // Le backend attend désormais une liste de classes (`classe_ids`)
       // plutôt qu'une seule classe. On envoie l'intégralité de la sélection.
       final Map<String, dynamic> sessionJson = {
-        'matiere': session.matiere,
+        if (session.matiereId != null) 'matiere_id': session.matiereId,
+        'matiere': session.matiere, // Fallback ou pour info si le backend le permet
         'enseignant_id': session.enseignantId,
         'lieu_id': session.lieuId,
         'classe_ids': session.classeIds,
@@ -1020,6 +1022,238 @@ class AuthService {
     } catch (e) {
       print('❌ Erreur critique lors du marquage: $e');
       AppUtils.handleError(e);
+      return false;
+    }
+  }
+
+  Future<List<AcademicYearModel>> getAcademicYears() async {
+    try {
+      final token = await _getToken();
+      final response = await _client.get(
+        Uri.parse(ApiEndpoints.academicYears),
+        headers: ApiEndpoints.getHeaders(token),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List list = data['data'] ?? [];
+        return list.map((item) => AcademicYearModel.fromJson(item)).toList();
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching academic years: $e');
+      return [];
+    }
+  }
+
+  Future<List<FiliereModel>> getFilieres() async {
+    try {
+      final token = await _getToken();
+      final response = await _client.get(
+        Uri.parse(ApiEndpoints.filieres),
+        headers: ApiEndpoints.getHeaders(token),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List list = data['data'] ?? [];
+        return list.map((item) => FiliereModel.fromJson(item)).toList();
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching filieres: $e');
+      return [];
+    }
+  }
+
+  Future<List<LevelModel>> getLevels() async {
+    try {
+      final token = await _getToken();
+      final response = await _client.get(
+        Uri.parse(ApiEndpoints.levels),
+        headers: ApiEndpoints.getHeaders(token),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List list = data['data'] ?? [];
+        return list.map((item) => LevelModel.fromJson(item)).toList();
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching levels: $e');
+      return [];
+    }
+  }
+
+  Future<List<ParcoursModel>> getParcours(String filiereId) async {
+    try {
+      final token = await _getToken();
+      final response = await _client.get(
+        Uri.parse(ApiEndpoints.parcoursByFiliere(filiereId)),
+        headers: ApiEndpoints.getHeaders(token),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List list = data['data'] ?? [];
+        return list.map((item) => ParcoursModel.fromJson(item)).toList();
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching parcours: $e');
+      return [];
+    }
+  }
+
+  Future<List<MatterModel>> getMatters() async {
+    try {
+      final token = await _getToken();
+      final response = await _client.get(
+        Uri.parse(ApiEndpoints.matters),
+        headers: ApiEndpoints.getHeaders(token),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List list = data['data'] ?? [];
+        return list.map((item) => MatterModel.fromJson(item)).toList();
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching matters: $e');
+      return [];
+    }
+  }
+
+  Future<bool> addAcademicYear(String nom) async {
+    try {
+      final token = await _getToken();
+      final response = await _client.post(
+        Uri.parse(ApiEndpoints.academicYears),
+        headers: ApiEndpoints.getHeaders(token),
+        body: jsonEncode({'annee': nom}),
+      );
+      return response.statusCode == 201 || response.statusCode == 200;
+    } catch (e) {
+      print('Error adding academic year: $e');
+      return false;
+    }
+  }
+
+  Future<bool> addFiliere(String nom) async {
+    try {
+      final token = await _getToken();
+      final response = await _client.post(
+        Uri.parse(ApiEndpoints.filieres),
+        headers: ApiEndpoints.getHeaders(token),
+        body: jsonEncode({'nom': nom}),
+      );
+      return response.statusCode == 201 || response.statusCode == 200;
+    } catch (e) {
+      print('Error adding filiere: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updateFiliere(String id, String nom) async {
+    try {
+      final token = await _getToken();
+      final response = await _client.patch(
+        Uri.parse("${ApiEndpoints.filieres}/$id"),
+        headers: ApiEndpoints.getHeaders(token),
+        body: jsonEncode({'nom': nom}),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Error updating filiere: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteFiliere(String id) async {
+    try {
+      final token = await _getToken();
+      final response = await _client.delete(
+        Uri.parse("${ApiEndpoints.filieres}/$id"),
+        headers: ApiEndpoints.getHeaders(token),
+      );
+      return response.statusCode == 200 || response.statusCode == 204;
+    } catch (e) {
+      print('Error deleting filiere: $e');
+      return false;
+    }
+  }
+
+  Future<bool> addLevel(String nom) async {
+    try {
+      final token = await _getToken();
+      final response = await _client.post(
+        Uri.parse(ApiEndpoints.levels),
+        headers: ApiEndpoints.getHeaders(token),
+        body: jsonEncode({'nom': nom}),
+      );
+      return response.statusCode == 201 || response.statusCode == 200;
+    } catch (e) {
+      print('Error adding level: $e');
+      return false;
+    }
+  }
+
+  Future<bool> addParcours(String nom, String filiereId) async {
+    try {
+      final token = await _getToken();
+      final response = await _client.post(
+        Uri.parse("${ApiEndpoints.baseUrl}/parcours"),
+        headers: ApiEndpoints.getHeaders(token),
+        body: jsonEncode({'nom': nom, 'filiere_id': filiereId}),
+      );
+      return response.statusCode == 201 || response.statusCode == 200;
+    } catch (e) {
+      print('Error adding parcours: $e');
+      return false;
+    }
+  }
+
+  Future<bool> addMatter(String nom, String code) async {
+    try {
+      final token = await _getToken();
+      final response = await _client.post(
+        Uri.parse(ApiEndpoints.matters),
+        headers: ApiEndpoints.getHeaders(token),
+        body: jsonEncode({'nom': nom, 'code': code}),
+      );
+      return response.statusCode == 201 || response.statusCode == 200;
+    } catch (e) {
+      print('Error adding matter: $e');
+      return false;
+    }
+  }
+
+  Future<bool> markAttendanceBulk(String sessionId, List<String> etudiantIds, AttendanceStatus status, {double? lat, double? long}) async {
+    if (useMock) {
+      for (var id in etudiantIds) {
+        _mock.attendances.add(AttendanceModel(
+          id: "bulk-${DateTime.now().millisecondsSinceEpoch}-$id",
+          sessionId: sessionId,
+          etudiantId: id,
+          timestamp: DateTime.now(),
+          statut: status,
+        ));
+      }
+      return true;
+    }
+    try {
+      final token = await _getToken();
+      final response = await _client.post(
+        Uri.parse(ApiEndpoints.attendanceBulk),
+        headers: ApiEndpoints.getHeaders(token),
+        body: jsonEncode({
+          'session_id': sessionId,
+          'etudiant_ids': etudiantIds,
+          'statut': status.name,
+          if (lat != null) 'lat_client': lat,
+          if (long != null) 'long_client': long,
+        }),
+      );
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      print('Error marking attendance bulk: $e');
       return false;
     }
   }

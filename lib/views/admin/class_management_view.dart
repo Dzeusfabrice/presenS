@@ -7,6 +7,7 @@ import '../../controllers/user_management_controller.dart';
 import '../../models/class_model.dart';
 import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
+import '../../core/utils/app_utils.dart';
 
 class ClassManagementView extends StatefulWidget {
   const ClassManagementView({Key? key}) : super(key: key);
@@ -458,232 +459,255 @@ class _ClassManagementViewState extends State<ClassManagementView> {
   }
 
   void _showClassForm({ClassModel? classModel}) {
-    final nameController = TextEditingController(text: classModel?.nom ?? '');
-    final levelController = TextEditingController(
-      text: classModel?.niveau ?? '',
-    );
-    final parcoursController = TextEditingController(
-      text: classModel?.parcours ?? '',
-    );
-    String status = classModel != null ? "Active" : "Active";
+    String? currentFiliereId = classModel?.filiereId;
+    String? currentLevelId = classModel?.niveauId;
+    String? currentParcoursId = classModel?.parcoursId;
+    String? currentAnneeId = classModel?.anneeId;
+    String status = "Active";
+
+    // Initial load of parcours if editing
+    if (currentFiliereId != null) {
+      _authController.fetchParcours(currentFiliereId);
+    }
 
     Get.bottomSheet(
-      isScrollControlled: true,
       StatefulBuilder(
         builder: (BuildContext modalContext, setModalState) {
-          return Container(
-            height: MediaQuery.of(modalContext).size.height * 0.7,
-            decoration: BoxDecoration(
-              color: AppColors.cardBackground,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(30),
+          return Obx(() {
+            // Forcer GetX à suivre ces listes, même si elles sont vides
+            _authController.academicYears.length;
+            _authController.filieres.length;
+            _authController.levels.length;
+            _authController.parcours.length;
+
+            return Container(
+              height: MediaQuery.of(modalContext).size.height * 0.8,
+              decoration: BoxDecoration(
+                color: AppColors.cardBackground,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(30),
+                ),
               ),
-            ),
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              children: [
-                Container(
-                  width: 40,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: AppColors.grey300,
-                    borderRadius: BorderRadius.circular(2.5),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  classModel == null ? "Nouvelle Classe" : "Modifier la Classe",
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        _buildField(
-                          nameController,
-                          "Nom de la classe (ex: Licence 1)",
-                          Icons.text_fields,
-                        ),
-                        const SizedBox(height: 16),
-                        _buildField(
-                          levelController,
-                          "Niveau (L1, M2, etc.)",
-                          Icons.leaderboard_outlined,
-                        ),
-                        const SizedBox(height: 16),
-                        _buildField(
-                          parcoursController,
-                          "Parcours",
-                          Icons.school_outlined,
-                        ),
-                        const SizedBox(height: 16),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.backgroundGrey,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: AppColors.grey300,
-                              width: 1,
-                            ),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 4,
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: status,
-                              isExpanded: true,
-                              items: const [
-                                DropdownMenuItem(
-                                  value: "Active",
-                                  child: Text("Active"),
-                                ),
-                                DropdownMenuItem(
-                                  value: "Inactive",
-                                  child: Text("Inactive"),
-                                ),
-                              ],
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setModalState(() => status = val);
-                                }
-                              },
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 40),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 56,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            onPressed: () async {
-                              print("🔵 Bouton Enregistrer cliqué - Début");
-
-                              if (nameController.text.trim().isEmpty) {
-                                print("❌ Nom vide");
-                                AppModal.showError(
-                                  context: modalContext,
-                                  title: "Erreur",
-                                  message: "Le nom de la classe est requis.",
-                                );
-                                return;
-                              }
-
-                              print("✅ Validation OK, traitement en cours...");
-
-                              // Créer ou mettre à jour la classe
-                              final newClass = ClassModel(
-                                id:
-                                    classModel?.id ??
-                                    "c-${DateTime.now().millisecondsSinceEpoch}",
-                                nom: nameController.text.trim(),
-                                niveau: levelController.text.trim(),
-                                parcours: parcoursController.text.trim(),
-                              );
-
-                              try {
-                                bool success;
-                                if (classModel == null) {
-                                  // Créer une nouvelle classe
-                                  print("📝 Création d'une nouvelle classe...");
-                                  success = await _authService.addClass(
-                                    newClass,
-                                  );
-                                  print("📝 Résultat création: $success");
-                                  if (success) {
-                                    print("✅ Classe créée avec succès");
-                                    Get.back();
-                                    _authController.fetchClasses();
-                                    // Attendre un peu pour que le modal se ferme
-                                    await Future.delayed(
-                                      const Duration(milliseconds: 300),
-                                    );
-                                    AppModal.showSuccess(
-                                      context: Get.context!,
-                                      title: "Succès",
-                                      message:
-                                          "La classe a été créée avec succès.",
-                                    );
-                                  } else {
-                                    print("❌ Échec de la création");
-                                    AppModal.showError(
-                                      context: modalContext,
-                                      title: "Erreur",
-                                      message:
-                                          "Impossible de créer la classe. Veuillez réessayer.",
-                                    );
-                                  }
-                                } else {
-                                  // Mettre à jour la classe existante
-                                  print("✏️ Mise à jour de la classe...");
-                                  success = await _authService.updateClass(
-                                    newClass,
-                                  );
-                                  print("✏️ Résultat mise à jour: $success");
-                                  if (success) {
-                                    print("✅ Classe modifiée avec succès");
-                                    Get.back();
-                                    _authController.fetchClasses();
-                                    // Attendre un peu pour que le modal se ferme
-                                    await Future.delayed(
-                                      const Duration(milliseconds: 300),
-                                    );
-                                    AppModal.showSuccess(
-                                      context: Get.context!,
-                                      title: "Succès",
-                                      message:
-                                          "La classe a été modifiée avec succès.",
-                                    );
-                                  } else {
-                                    print("❌ Échec de la modification");
-                                    AppModal.showError(
-                                      context: modalContext,
-                                      title: "Erreur",
-                                      message:
-                                          "Impossible de modifier la classe. Veuillez réessayer.",
-                                    );
-                                  }
-                                }
-                              } catch (e) {
-                                print("❌ Erreur exception: $e");
-                                AppModal.showError(
-                                  context: modalContext,
-                                  title: "Erreur",
-                                  message:
-                                      "Une erreur est survenue: ${e.toString()}",
-                                );
-                              }
-                            },
-                            child: const Text(
-                              "Enregistrer",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: AppColors.grey300,
+                      borderRadius: BorderRadius.circular(2.5),
                     ),
                   ),
-                ),
-              ],
-            ),
-          );
+                  const SizedBox(height: 20),
+                  Text(
+                    classModel == null
+                        ? "Nouvelle Classe"
+                        : "Modifier la Classe",
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildLabel("Année Académique"),
+                          DropdownButtonFormField<String>(
+                            value: currentAnneeId,
+                            decoration: _inputDecoration(
+                              "Sélectionner l'année",
+                              Icons.calendar_today_rounded,
+                            ),
+                            items:
+                                _authController.academicYears.map((a) {
+                                  return DropdownMenuItem(
+                                    value: a.id,
+                                    child: Text(a.nom),
+                                  );
+                                }).toList(),
+                            onChanged: (val) => currentAnneeId = val,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildLabel("Filière"),
+                          DropdownButtonFormField<String>(
+                            value: currentFiliereId,
+                            decoration: _inputDecoration(
+                              "Sélectionner la filière",
+                              Icons.business_rounded,
+                            ),
+                            items:
+                                _authController.filieres.map((f) {
+                                  return DropdownMenuItem(
+                                    value: f.id,
+                                    child: Text(f.nom),
+                                  );
+                                }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setModalState(() {
+                                  currentFiliereId = val;
+                                  currentParcoursId = null;
+                                });
+                                _authController.fetchParcours(val);
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          _buildLabel("Niveau"),
+                          DropdownButtonFormField<String>(
+                            value: currentLevelId,
+                            decoration: _inputDecoration(
+                              "Sélectionner le niveau",
+                              Icons.leaderboard_rounded,
+                            ),
+                            items:
+                                _authController.levels.map((l) {
+                                  return DropdownMenuItem(
+                                    value: l.id,
+                                    child: Text(l.nom),
+                                  );
+                                }).toList(),
+                            onChanged: (val) => currentLevelId = val,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildLabel("Parcours (Optionnel)"),
+                          DropdownButtonFormField<String>(
+                            value: currentParcoursId,
+                            decoration: _inputDecoration(
+                              "Sélectionner le parcours",
+                              Icons.school_rounded,
+                            ),
+                            items:
+                                _authController.parcours.map((p) {
+                                  return DropdownMenuItem(
+                                    value: p.id,
+                                    child: Text(p.nom),
+                                  );
+                                }).toList(),
+                            onChanged: (val) => currentParcoursId = val,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildLabel("Statut"),
+                          DropdownButtonFormField<String>(
+                            value: status,
+                            decoration: _inputDecoration(
+                              "Statut de la classe",
+                              Icons.info_outline_rounded,
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: "Active",
+                                child: Text("Active"),
+                              ),
+                              DropdownMenuItem(
+                                value: "Inactive",
+                                child: Text("Inactive"),
+                              ),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) status = val;
+                            },
+                          ),
+                          const SizedBox(height: 40),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              onPressed: () async {
+                                if (currentFiliereId == null ||
+                                    currentLevelId == null ||
+                                    currentAnneeId == null) {
+                                  AppUtils.showWarningToast(
+                                    "Veuillez remplir les informations obligatoires (Année, Filière, Niveau).",
+                                  );
+                                  return;
+                                }
+
+                                final selectedFiliere = _authController.filieres
+                                    .firstWhere(
+                                      (f) => f.id == currentFiliereId,
+                                    );
+                                final selectedLevel = _authController.levels
+                                    .firstWhere((l) => l.id == currentLevelId);
+                                final selectedParcours = _authController
+                                    .parcours
+                                    .firstWhereOrNull(
+                                      (p) => p.id == currentParcoursId,
+                                    );
+
+                                // Le nom de la classe est souvent une combinaison
+                                final className =
+                                    "${selectedFiliere.nom} - ${selectedLevel.nom}${selectedParcours != null ? ' (${selectedParcours.nom})' : ''}";
+
+                                final newClass = ClassModel(
+                                  id: classModel?.id ?? "",
+                                  nom: className,
+                                  niveau: selectedLevel.nom,
+                                  parcours: selectedParcours?.nom ?? "",
+                                  filiereId: currentFiliereId,
+                                  niveauId: currentLevelId,
+                                  parcoursId: currentParcoursId,
+                                  anneeId: currentAnneeId,
+                                );
+
+                                try {
+                                  bool success;
+                                  if (classModel == null) {
+                                    success = await _authService.addClass(
+                                      newClass,
+                                    );
+                                  } else {
+                                    success = await _authService.updateClass(
+                                      newClass,
+                                    );
+                                  }
+
+                                  if (success) {
+                                    Get.back();
+                                    _authController.fetchClasses();
+                                    AppUtils.showSuccessToast(
+                                      "Classe enregistrée avec succès.",
+                                    );
+                                  } else {
+                                    AppUtils.showErrorToast(
+                                      "Erreur lors de l'enregistrement.",
+                                    );
+                                  }
+                                } catch (e) {
+                                  AppUtils.handleError(e);
+                                }
+                              },
+                              child: const Text(
+                                "Enregistrer",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          });
         },
       ),
+      isScrollControlled: true,
     );
   }
 
@@ -708,43 +732,43 @@ class _ClassManagementViewState extends State<ClassManagementView> {
     );
   }
 
-  Widget _buildField(
-    TextEditingController controller,
-    String label,
-    IconData icon,
-  ) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.backgroundGrey,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: TextField(
-        controller: controller,
+  Widget _buildLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      child: Text(
+        label,
         style: TextStyle(
-          color: AppColors.textPrimary,
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
-        ),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: TextStyle(
-            color: AppColors.textSecondary.withOpacity(0.7),
-            fontSize: 14,
-          ),
-          prefixIcon: Icon(
-            icon,
-            color: Colors.green.withOpacity(0.7),
-            size: 20,
-          ),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            vertical: 16,
-            horizontal: 16,
-          ),
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textPrimary.withOpacity(0.7),
         ),
       ),
     );
   }
+
+  InputDecoration _inputDecoration(String hint, IconData icon) {
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(
+        icon,
+        color: AppColors.primary.withOpacity(0.7),
+        size: 20,
+      ),
+      filled: true,
+      fillColor: AppColors.backgroundGrey,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: AppColors.grey300),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: AppColors.grey300),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    );
+  }
+
+  // Suppression de _buildField car obsolète
 }
 
 // Peintre pour créer un pattern original sur les cartes de classe

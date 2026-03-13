@@ -88,22 +88,30 @@ class AttendanceController extends GetxController {
   Future<bool> updateBulkManualStatus({
     required String sessionId,
     required Map<String, AttendanceStatus> changes,
+    double? lat,
+    double? lon,
   }) async {
     isLoading.value = true;
     try {
-      bool allSuccess = true;
-      // On boucle sur les changements mais sans fetcher entre chaque
+      // Regrouper les étudiants par statut pour limiter le nombre d'appels API
+      final Map<AttendanceStatus, List<String>> groups = {};
       for (var entry in changes.entries) {
-        final success = await updateManualStatus(
-          sessionId: sessionId,
-          etudiantId: entry.key,
-          status: entry.value,
-          fetchAfter: false,
+        groups.putIfAbsent(entry.value, () => []).add(entry.key);
+      }
+
+      bool allSuccess = true;
+      for (var entry in groups.entries) {
+        final success = await _authService.markAttendanceBulk(
+          sessionId,
+          entry.value,
+          entry.key,
+          lat: lat,
+          long: lon,
         );
         if (!success) allSuccess = false;
       }
-      
-      // On fetch une seule fois à la fin
+
+      // On fetch une seule fois à la fin pour mettre à jour l'interface
       await fetchAttendanceForSession(sessionId);
       return allSuccess;
     } finally {
