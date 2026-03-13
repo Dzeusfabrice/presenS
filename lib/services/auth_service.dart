@@ -381,6 +381,39 @@ class AuthService {
     }
   }
 
+  Future<bool> addUsersBulk(List<UserModel> users) async {
+    if (useMock) {
+      _mock.users.addAll(users);
+      return true;
+    }
+    try {
+      final token = await _getToken();
+      final response = await _client.post(
+        Uri.parse(ApiEndpoints.usersBulk),
+        headers: ApiEndpoints.getHeaders(token),
+        body: jsonEncode({'users': users.map((u) => u.toJson()).toList()}),
+      );
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return true;
+      } else {
+        print('Error adding users bulk [${response.statusCode}]: ${response.body}');
+        try {
+          final errorData = jsonDecode(response.body);
+          final errorMsg =
+              errorData['message'] ?? errorData['error'] ?? 'Erreur serveur';
+          AppUtils.showErrorToast(errorMsg);
+        } catch (_) {
+          AppUtils.showErrorToast("Erreur serveur (${response.statusCode})");
+        }
+        return false;
+      }
+    } catch (e) {
+      print('Error adding users bulk: $e');
+      AppUtils.handleError(e);
+      return false;
+    }
+  }
+
   Future<bool> updateUser(UserModel user) async {
     if (useMock) {
       final index = _mock.users.indexWhere((u) => u.id == user.id);
@@ -954,10 +987,10 @@ class AuthService {
     }
   }
 
-  Future<bool> markAttendance(AttendanceModel attendance) async {
+  Future<bool> markAttendance(AttendanceModel attendance, {bool showToast = true}) async {
     if (useMock) {
       _mock.attendances.add(attendance);
-      AppUtils.showSuccessToast("Présence enregistrée ! (MODE MOCK)");
+      if (showToast) AppUtils.showSuccessToast("Présence enregistrée ! (MODE MOCK)");
       return true;
     }
     try {
@@ -976,7 +1009,7 @@ class AuthService {
       print('📥 Réponse marquage [${response.statusCode}]: ${response.body}');
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-        AppUtils.showSuccessToast("Présence enregistrée !");
+        if (showToast) AppUtils.showSuccessToast("Présence enregistrée !");
         return true;
       } else {
         final data = jsonDecode(response.body);

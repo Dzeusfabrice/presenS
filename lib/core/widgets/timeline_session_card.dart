@@ -136,6 +136,40 @@ class TimelineSessionCard extends StatelessWidget {
                             color: Color(0xFF1F2937),
                           ),
                         ),
+                        const SizedBox(height: 6),
+                        
+                        // CLASSES INFO
+                        Obx(() {
+                          final authController = Get.find<AuthController>();
+                          final classes = session.classes ?? [];
+                          final classNames = session.classeIds.map((id) {
+                            final cls = classes.firstWhereOrNull((c) => c.id == id) ??
+                                       authController.classes.firstWhereOrNull((c) => c.id == id);
+                            return cls != null ? "${cls.nom} ${cls.niveau}" : id;
+                          }).join(", ");
+                          
+                          return Row(
+                            children: [
+                              Icon(
+                                Icons.school_rounded,
+                                size: 14,
+                                color: AppColors.textSecondary.withOpacity(0.5),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  classNames,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary.withOpacity(0.8),
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          );
+                        }),
                         const SizedBox(height: 12),
 
                         // INFO LINE (User & Room)

@@ -5,11 +5,12 @@ import '../../controllers/attendance_controller.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/session_controller.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/widgets/app_modal.dart';
 import '../../models/session_model.dart';
 import '../../models/attendance_model.dart';
 import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
+import '../../core/utils/app_utils.dart';
+import '../../models/class_model.dart';
 import 'session_recap_view.dart';
 
 class ManualAttendanceView extends StatefulWidget {
@@ -36,11 +37,11 @@ class _ManualAttendanceViewState extends State<ManualAttendanceView>
   final AuthService _authService = AuthService();
 
   SessionModel? _session;
-  List<UserModel> _students = [];
-  Map<String, AttendanceStatus> _attendanceMap = {}; // etudiantId -> status
+  Map<String, List<UserModel>> _studentsByClass = {};
+  Map<String, Map<String, AttendanceStatus>> _attendanceMap = {}; // classId -> (etudiantId -> status)
   bool _isCallStarted = false;
+  String? _selectedClassId;
   bool _isSaving = false;
-  int _currentLocationIndex = 0;
   List<String> _allLocationIds = [];
 
   late AnimationController _pulseController;
@@ -93,32 +94,36 @@ class _ManualAttendanceViewState extends State<ManualAttendanceView>
       _allLocationIds.addAll(widget.additionalLocationIds!);
     }
 
-    // Charger les étudiants
-    final List<UserModel> allStudents = [];
+    // Charger les étudiants et les grouper par classe
+    final Map<String, List<UserModel>> grouped = {};
     for (final classId in _session!.classeIds) {
       final students = await _authService.getStudentsByClass(classId);
-      allStudents.addAll(students);
+      grouped[classId] = students;
+      
+      // Initialiser la map de présence pour cette classe
+      _attendanceMap[classId] = {
+        for (var s in students) s.id: AttendanceStatus.ABSENT
+      };
     }
+
     setState(() {
-      _students = allStudents;
-      // Initialiser tous les étudiants comme absents par défaut
-      for (final student in _students) {
-        _attendanceMap[student.id] = AttendanceStatus.ABSENT;
-      }
+      _studentsByClass = grouped;
     });
   }
 
-  void _startCall() {
+  void _startCall(String classId) {
     setState(() {
+      _selectedClassId = classId;
       _isCallStarted = true;
     });
   }
 
   void _toggleAttendance(String studentId) {
+    if (_selectedClassId == null) return;
     setState(() {
-      final currentStatus =
-          _attendanceMap[studentId] ?? AttendanceStatus.ABSENT;
-      _attendanceMap[studentId] =
+      final classMap = _attendanceMap[_selectedClassId!]!;
+      final currentStatus = classMap[studentId] ?? AttendanceStatus.ABSENT;
+      classMap[studentId] =
           currentStatus == AttendanceStatus.PRESENT
               ? AttendanceStatus.ABSENT
               : AttendanceStatus.PRESENT;
@@ -126,71 +131,36 @@ class _ManualAttendanceViewState extends State<ManualAttendanceView>
   }
 
   Future<void> _saveAttendance() async {
-    if (_isSaving) return;
+    if (_isSaving || _selectedClassId == null) return;
 
     setState(() {
       _isSaving = true;
     });
 
     try {
-      // Enregistrer les présences pour la salle actuelle
-      final sessionIdForLocation =
-          _currentLocationIndex == 0
-              ? widget.sessionId
-              : '${widget.sessionId}_loc_${_currentLocationIndex}';
-
+      final currentClassAttendance = _attendanceMap[_selectedClassId!]!;
+      
       bool allSuccess = true;
-      for (final entry in _attendanceMap.entries) {
-        final attendance = await _attendanceController.updateManualStatus(
-          sessionId: sessionIdForLocation,
+      for (final entry in currentClassAttendance.entries) {
+        final success = await _attendanceController.updateManualStatus(
+          sessionId: widget.sessionId,
           etudiantId: entry.key,
           status: entry.value,
         );
-        if (!attendance) allSuccess = false;
+        if (!success) allSuccess = false;
       }
 
       if (!allSuccess) {
-        await AppModal.showWarning(
-          context: context,
-          title: "Attention",
-          message:
-              "Certaines présences n'ont pas pu être enregistrées. Veuillez réessayer.",
-          confirmText: "OK",
-        );
-        setState(() => _isSaving = false);
-        return;
-      }
-
-      // Si on a plusieurs salles et qu'on n'est pas à la dernière
-      if (_allLocationIds.length > 1 &&
-          _currentLocationIndex < _allLocationIds.length - 1) {
-        // Passer à la salle suivante
-        setState(() {
-          _currentLocationIndex++;
-          _isCallStarted = false;
-          // Réinitialiser les présences pour la nouvelle salle
-          for (final student in _students) {
-            _attendanceMap[student.id] = AttendanceStatus.ABSENT;
-          }
-        });
-
-        AppModal.showSuccess(
-          context: context,
-          title: "Appel enregistré",
-          message:
-              "L'appel de la salle ${_currentLocationIndex} a été enregistré avec succès. Vous pouvez maintenant passer à la salle suivante.",
-        );
+        AppUtils.showErrorToast("Certaines présences n'ont pas pu être enregistrées.");
       } else {
-        // Tous les appels sont terminés, rediriger vers le récap
-        Get.off(() => SessionRecapView(sessionId: widget.sessionId));
+        AppUtils.showSuccessToast("Appel enregistré pour cette classe");
+        setState(() {
+           _isCallStarted = false;
+           _selectedClassId = null;
+        });
       }
     } catch (e) {
-      AppModal.showError(
-        context: context,
-        title: "Erreur",
-        message:
-            "Une erreur est survenue lors de l'enregistrement. Veuillez réessayer.",
-      );
+      AppUtils.showErrorToast("Une erreur est survenue");
     } finally {
       setState(() => _isSaving = false);
     }
@@ -202,41 +172,53 @@ class _ManualAttendanceViewState extends State<ManualAttendanceView>
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final currentLocation = _authController.locations.firstWhereOrNull(
-      (loc) => loc.id == _allLocationIds[_currentLocationIndex],
-    );
-    final locationName = currentLocation?.name ?? "Salle inconnue";
-
     return Scaffold(
       backgroundColor: AppColors.backgroundGrey,
       appBar: AppBar(
-        title: const Text(
-          "Appel Manuel",
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: Text(
+          _isCallStarted ? "Appel : ${_session!.matiere}" : "Choisir une classe",
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppColors.primary,
         elevation: 0,
         foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            if (_isCallStarted) {
+              setState(() {
+                _isCallStarted = false;
+                _selectedClassId = null;
+              });
+            } else {
+              Get.back();
+            }
+          },
+        ),
+        actions: [
+          if (!_isCallStarted)
+            TextButton(
+              onPressed: () => Get.off(() => SessionRecapView(sessionId: widget.sessionId)),
+              child: const Text("Terminer", style: TextStyle(color: Colors.white)),
+            )
+        ],
       ),
       body: Column(
         children: [
-          // Header moderne
-          _buildModernHeader(locationName),
-
-          // Cercle animé (si appel pas encore commencé)
-          if (!_isCallStarted) _buildAnimatedCallIndicator(),
-
-          // Fiche de présence
-          Expanded(child: _buildAttendanceSheet()),
-
-          // Bouton d'action
-          _buildActionButton(),
+          _buildModernHeader(),
+          if (!_isCallStarted) Expanded(child: _buildClassSelectionList()),
+          if (_isCallStarted) ...[
+             _buildAnimatedCallIndicator(),
+             Expanded(child: _buildAttendanceSheet()),
+             _buildActionButton(),
+          ]
         ],
       ),
     );
   }
 
-  Widget _buildModernHeader(String locationName) {
+  Widget _buildModernHeader() {
+    final location = _authController.locations.firstWhereOrNull((l) => l.id == _session!.lieuId);
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -245,136 +227,81 @@ class _ManualAttendanceViewState extends State<ManualAttendanceView>
           end: Alignment.bottomRight,
           colors: [AppColors.primary, AppColors.primaryLight],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _session!.matiere,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.location_on,
-                          color: Colors.white70,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          locationName,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
-                        ),
-                        if (_allLocationIds.length > 1) ...[
-                          const SizedBox(width: 12),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              "Salle ${_currentLocationIndex + 1}/${_allLocationIds.length}",
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _session!.matiere,
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
-              ),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  shape: BoxShape.circle,
+                Text(
+                  location?.name ?? "Salle ${_session!.lieuId}",
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
-                child: const Icon(
-                  Icons.person_outline,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _buildStatCard("Total", "${_students.length}", Colors.white70),
-              const SizedBox(width: 12),
-              _buildStatCard(
-                "Présents",
-                "${_attendanceMap.values.where((s) => s == AttendanceStatus.PRESENT).length}",
-                Colors.greenAccent,
-              ),
-              const SizedBox(width: 12),
-              _buildStatCard(
-                "Absents",
-                "${_attendanceMap.values.where((s) => s == AttendanceStatus.ABSENT).length}",
-                Colors.redAccent,
-              ),
-            ],
-          ),
+          if (_isCallStarted && _selectedClassId != null)
+             _buildHeaderStatusBadge(),
         ],
       ),
     );
   }
 
-  Widget _buildStatCard(String label, String value, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: const TextStyle(color: Colors.white70, fontSize: 11),
-            ),
-          ],
-        ),
+  Widget _buildHeaderStatusBadge() {
+    final students = _studentsByClass[_selectedClassId!] ?? [];
+    final classAttendance = _attendanceMap[_selectedClassId!] ?? {};
+    final presents = classAttendance.values.where((v) => v == AttendanceStatus.PRESENT).length;
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        "$presents / ${students.length} Présents",
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+      ),
+    );
+  }
+
+  Widget _buildClassSelectionList() {
+    if (_studentsByClass.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final classes = _session!.classes ?? [];
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _session!.classeIds.length,
+      itemBuilder: (context, index) {
+        final classId = _session!.classeIds[index];
+        final classObj = classes.firstWhereOrNull((c) => c.id == classId) ?? 
+                        _authController.classes.firstWhereOrNull((c) => c.id == classId) ??
+                        ClassModel(id: classId, nom: "Classe $classId", niveau: "", parcours: "");
+        
+        final students = _studentsByClass[classId] ?? [];
+        return _buildClassSelectionCard(classObj, students);
+      },
+    );
+  }
+
+  Widget _buildClassSelectionCard(ClassModel classObj, List<UserModel> students) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        title: Text(classObj.nom, style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text("${classObj.niveau} ${classObj.parcours} • ${students.length} étudiants"),
+        trailing: const Icon(Icons.chevron_right, color: AppColors.primary),
+        onTap: () => _startCall(classObj.id),
       ),
     );
   }
@@ -444,25 +371,11 @@ class _ManualAttendanceViewState extends State<ManualAttendanceView>
           ),
           const SizedBox(height: 24),
           Text(
-            "Appuyez pour commencer l'appel",
+            "Faites l'appel pour la classe sélectionnée",
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          ElevatedButton.icon(
-            onPressed: _startCall,
-            icon: const Icon(Icons.play_arrow),
-            label: const Text("Commencer l'appel"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
             ),
           ),
         ],
@@ -520,7 +433,7 @@ class _ManualAttendanceViewState extends State<ManualAttendanceView>
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    "${_students.length} étudiants",
+                    "${_studentsByClass[_selectedClassId!]?.length ?? 0} étudiants",
                     style: const TextStyle(
                       color: AppColors.primary,
                       fontWeight: FontWeight.w600,
@@ -536,11 +449,11 @@ class _ManualAttendanceViewState extends State<ManualAttendanceView>
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: _students.length,
+              itemCount: _studentsByClass[_selectedClassId!]?.length ?? 0,
               itemBuilder: (context, index) {
-                final student = _students[index];
+                final student = _studentsByClass[_selectedClassId!]![index];
                 final status =
-                    _attendanceMap[student.id] ?? AttendanceStatus.ABSENT;
+                    _attendanceMap[_selectedClassId!]![student.id] ?? AttendanceStatus.ABSENT;
                 final isPresent = status == AttendanceStatus.PRESENT;
 
                 return _buildStudentRow(student, isPresent, index + 1);
@@ -643,20 +556,19 @@ class _ManualAttendanceViewState extends State<ManualAttendanceView>
           ),
           child:
               _isSaving
-                  ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
+                  ? const Center(
+                    child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      ),
                   )
-                  : Text(
-                    _allLocationIds.length > 1 &&
-                            _currentLocationIndex < _allLocationIds.length - 1
-                        ? "Terminer cette salle et passer à la suivante"
-                        : "Enregistrer l'appel",
-                    style: const TextStyle(
+                  : const Text(
+                    "Enregistrer l'appel",
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),

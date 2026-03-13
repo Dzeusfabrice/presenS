@@ -33,7 +33,7 @@ class AttendanceModel {
       latClient: (json['lat_client'] as num?)?.toDouble(),
       longClient: (json['long_client'] as num?)?.toDouble(),
       statut: _parseStatus(json['statut']),
-      isMocked: json['is_mocked'] ?? false,
+      isMocked: json['is_mocked'] == true || json['is_mocked'] == 1,
     );
   }
 

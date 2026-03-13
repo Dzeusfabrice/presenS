@@ -63,8 +63,9 @@ class AttendanceController extends GetxController {
     required String sessionId,
     required String etudiantId,
     required AttendanceStatus status,
+    bool fetchAfter = true,
   }) async {
-    isLoading.value = true;
+    if (fetchAfter) isLoading.value = true;
     try {
       final attendance = AttendanceModel(
         id: "att-${DateTime.now().millisecondsSinceEpoch}",
@@ -74,12 +75,37 @@ class AttendanceController extends GetxController {
         statut: status,
       );
 
-      final success = await _authService.markAttendance(attendance);
-      if (success) {
+      final success = await _authService.markAttendance(attendance, showToast: fetchAfter);
+      if (success && fetchAfter) {
         await fetchAttendanceForSession(sessionId);
-        return true;
       }
-      return false;
+      return success;
+    } finally {
+      if (fetchAfter) isLoading.value = false;
+    }
+  }
+
+  Future<bool> updateBulkManualStatus({
+    required String sessionId,
+    required Map<String, AttendanceStatus> changes,
+  }) async {
+    isLoading.value = true;
+    try {
+      bool allSuccess = true;
+      // On boucle sur les changements mais sans fetcher entre chaque
+      for (var entry in changes.entries) {
+        final success = await updateManualStatus(
+          sessionId: sessionId,
+          etudiantId: entry.key,
+          status: entry.value,
+          fetchAfter: false,
+        );
+        if (!success) allSuccess = false;
+      }
+      
+      // On fetch une seule fois à la fin
+      await fetchAttendanceForSession(sessionId);
+      return allSuccess;
     } finally {
       isLoading.value = false;
     }

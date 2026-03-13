@@ -174,6 +174,15 @@ class _SessionRecapViewState extends State<SessionRecapView> {
                         color: Colors.white,
                       ),
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _session!.classeIds.map((id) {
+                        final cls = (_session!.classes ?? []).firstWhereOrNull((c) => c.id == id) ??
+                                   _authController.classes.firstWhereOrNull((c) => c.id == id);
+                        return cls != null ? "${cls.nom} ${cls.niveau} ${cls.parcours}" : id;
+                      }).join(", "),
+                      style: const TextStyle(color: Colors.white70, fontSize: 13, fontStyle: FontStyle.italic),
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       children: [

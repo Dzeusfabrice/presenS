@@ -1,3 +1,5 @@
+import 'class_model.dart';
+
 enum SessionMode { GPS, SCAN_QR, MANUEL }
 
 enum SessionStatus { ATTENTE, EN_COURS, CLOS }
@@ -8,6 +10,7 @@ class SessionModel {
   final String enseignantId;
   final String lieuId;
   final List<String> classeIds;
+  final List<ClassModel>? classes;
   final SessionMode mode;
   final SessionStatus statut;
   final DateTime createdAt;
@@ -23,6 +26,7 @@ class SessionModel {
     required this.enseignantId,
     required this.lieuId,
     required this.classeIds,
+    this.classes,
     required this.mode,
     required this.statut,
     required this.createdAt,
@@ -34,19 +38,41 @@ class SessionModel {
   });
 
   factory SessionModel.fromJson(Map<String, dynamic> json) {
-    List<String> classes = [];
+    List<String> classesIds = [];
+    List<ClassModel> classesObj = [];
     try {
       if (json['classe_ids'] != null && json['classe_ids'] is List) {
-        classes =
+        classesIds =
             (json['classe_ids'] as List)
                 .where((e) => e != null)
                 .map((e) => e.toString())
                 .toList();
-      } else if (json['classe_id'] != null) {
-        classes = [json['classe_id'].toString()];
+      }
+
+      if (json['classes'] != null && json['classes'] is List) {
+        // Nouveau format : liste d'objets classes
+        List rawClasses = json['classes'] as List;
+        for (var item in rawClasses) {
+          if (item != null) {
+            if (item is Map) {
+              final cm = ClassModel.fromJson(Map<String, dynamic>.from(item));
+              classesObj.add(cm);
+              // S'assurer que l'ID est aussi dans classeIds s'il n'y était pas
+              if (!classesIds.contains(cm.id)) {
+                classesIds.add(cm.id);
+              }
+            } else if (!classesIds.contains(item.toString())) {
+              classesIds.add(item.toString());
+            }
+          }
+        }
+      }
+
+      if (classesIds.isEmpty && json['classe_id'] != null) {
+        classesIds = [json['classe_id'].toString()];
       }
     } catch (_) {
-      classes = [];
+      // Garder les listes vides déjà initialisées
     }
 
     return SessionModel(
@@ -54,7 +80,8 @@ class SessionModel {
       matiere: json['matiere'] ?? '',
       enseignantId: json['enseignant_id'] ?? '',
       lieuId: json['lieu_id'] ?? '',
-      classeIds: classes,
+      classeIds: classesIds,
+      classes: classesObj.isNotEmpty ? classesObj : null,
       mode: _parseMode(json['mode']),
       statut: _parseStatus(json['statut']),
       createdAt:
@@ -65,7 +92,7 @@ class SessionModel {
       heureFin: _parseDateTime(json['heure_fin'] ?? json['heureFin']),
       margeTolerance: json['marge_tolerance'],
       qrCode: json['qr_code'],
-      fullName: json['nom_complet']
+      fullName: json['nom_complet'],
     );
   }
 

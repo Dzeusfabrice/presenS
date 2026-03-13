@@ -11,6 +11,7 @@ class ApiEndpoints {
 
   // --- USERS ---
   static const String users = "$baseUrl/users";
+  static const String usersBulk = "$baseUrl/users/bulk";
   static String userById(String id) => "$baseUrl/users/$id";
   static String userStatus(String id) => "$baseUrl/users/$id/status";
 

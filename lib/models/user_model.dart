@@ -54,7 +54,7 @@ class UserModel {
           json['created_at'] != null
               ? DateTime.parse(json['created_at'])
               : null,
-      isActive: json['is_active'] ?? true,
+      isActive: (json['is_active'] == true || json['is_active'] == 1) || json['is_active'] == null,
       token: json['token'],
       deviceId: json['device_id'],
       matricule: json['matricule'],

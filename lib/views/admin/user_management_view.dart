@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:csv/csv.dart';
 import '../../controllers/user_management_controller.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_utils.dart';
@@ -48,6 +50,27 @@ class _UserManagementViewState extends State<UserManagementView>
         backgroundColor: AppColors.cardBackground,
         elevation: 0,
         foregroundColor: AppColors.textPrimary,
+        actions: [
+          Obx(
+            () =>
+                _tabController.index == 1
+                    ? PopupMenuButton<String>(
+                      onSelected: (value) {
+                        if (value == 'import_csv') {
+                          _importStudentsFromCSV(context);
+                        }
+                      },
+                      itemBuilder:
+                          (BuildContext context) => [
+                            const PopupMenuItem<String>(
+                              value: 'import_csv',
+                              child: Text('Importer CSV Étudiants'),
+                            ),
+                          ],
+                    )
+                    : const SizedBox.shrink(),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           labelColor: AppColors.primary,
@@ -72,7 +95,10 @@ class _UserManagementViewState extends State<UserManagementView>
           }
         },
         backgroundColor: AppColors.primary,
-        child: Icon(Icons.person_add_alt_1_rounded, color: AppColors.cardBackground),
+        child: Icon(
+          Icons.person_add_alt_1_rounded,
+          color: AppColors.cardBackground,
+        ),
       ),
     );
   }
@@ -269,10 +295,7 @@ class _UserManagementViewState extends State<UserManagementView>
       decoration: BoxDecoration(
         color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppColors.border,
-          width: 1,
-        ),
+        border: Border.all(color: AppColors.border, width: 1),
         boxShadow: [
           BoxShadow(
             color: AppColors.textPrimary.withOpacity(0.03),
@@ -302,9 +325,7 @@ class _UserManagementViewState extends State<UserManagementView>
                   ),
                   child: Center(
                     child: Text(
-                      user.nom.isNotEmpty
-                          ? user.nom[0].toUpperCase()
-                          : '?',
+                      user.nom.isNotEmpty ? user.nom[0].toUpperCase() : '?',
                       style: TextStyle(
                         color: AppColors.primary,
                         fontWeight: FontWeight.bold,
@@ -348,39 +369,40 @@ class _UserManagementViewState extends State<UserManagementView>
                       _confirmDelete(context, user);
                     }
                   },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'edit',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.edit_rounded,
-                            color: AppColors.primary,
-                            size: 18,
+                  itemBuilder:
+                      (context) => [
+                        PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.edit_rounded,
+                                color: AppColors.primary,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Text("Modifier"),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          Text("Modifier"),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.delete_outline_rounded,
-                            color: Colors.red,
-                            size: 18,
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.delete_outline_rounded,
+                                color: Colors.red,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                "Supprimer",
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            "Supprimer",
-                            style: TextStyle(color: Colors.red),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                        ),
+                      ],
                 ),
               ],
             ),
@@ -418,7 +440,7 @@ class _UserManagementViewState extends State<UserManagementView>
       labelStyle: GoogleFonts.outfit(
         fontSize: 12,
         fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-          color: isSelected ? AppColors.cardBackground : AppColors.textSecondary,
+        color: isSelected ? AppColors.cardBackground : AppColors.textSecondary,
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       elevation: 0,
@@ -1124,5 +1146,86 @@ class _UserManagementViewState extends State<UserManagementView>
         ),
       ],
     );
+  }
+
+  void _importStudentsFromCSV(BuildContext context) async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+      );
+
+      if (result != null) {
+        final file = result.files.first;
+        final input = String.fromCharCodes(file.bytes!);
+        final fields = CsvToListConverter().convert(input);
+
+        if (fields.isEmpty) {
+          AppUtils.showErrorToast("Le fichier CSV est vide");
+          return;
+        }
+
+        // Assuming CSV format: nom,prenom,email,matricule,classeId,niveau,parcours
+        final headers =
+            fields[0].map((e) => e.toString().toLowerCase()).toList();
+        final dataRows = fields.sublist(1);
+
+        List<UserModel> students = [];
+        for (var row in dataRows) {
+          if (row.length < 7) continue; // Skip invalid rows
+
+          final student = UserModel(
+            id: '', // Will be set by backend
+            nom: row[0].toString(),
+            prenom: row[1].toString(),
+            email: row[2].toString(),
+            role: UserRole.ETUDIANT,
+            matricule: row[3].toString(),
+            classeId: row[4].toString(),
+            niveau: row[5].toString(),
+            parcours: row[6].toString(),
+          );
+          students.add(student);
+        }
+
+        if (students.isEmpty) {
+          AppUtils.showErrorToast("Aucun étudiant valide trouvé dans le CSV");
+          return;
+        }
+
+        // Show confirmation dialog
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder:
+              (context) => AlertDialog(
+                title: const Text("Confirmer l'import"),
+                content: Text(
+                  "Voulez-vous importer ${students.length} étudiant(s) ?",
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text("Annuler"),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: const Text("Importer"),
+                  ),
+                ],
+              ),
+        );
+
+        if (confirmed == true) {
+          final success = await controller.addUsersBulk(students);
+          if (success) {
+            AppUtils.showSuccessToast(
+              "${students.length} étudiant(s) importé(s) avec succès",
+            );
+          }
+        }
+      }
+    } catch (e) {
+      AppUtils.showErrorToast("Erreur lors de l'import: $e");
+    }
   }
 }

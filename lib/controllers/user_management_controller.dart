@@ -55,6 +55,19 @@ class UserManagementController extends GetxController {
     }
   }
 
+  Future<bool> addUsersBulk(List<UserModel> users) async {
+    isLoading.value = true;
+    try {
+      final success = await _authService.addUsersBulk(users);
+      if (success) {
+        await fetchUsers();
+      }
+      return success;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
   Future<bool> updateUser(UserModel user) async {
     isLoading.value = true;
     try {

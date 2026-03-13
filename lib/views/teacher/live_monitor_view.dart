@@ -11,8 +11,9 @@ import '../../models/session_model.dart';
 import '../../models/attendance_model.dart';
 import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
-import 'manual_attendance_view.dart';
 import 'session_recap_view.dart';
+import 'class_attendance_monitor_view.dart';
+import '../../models/class_model.dart';
 
 class LiveMonitorView extends StatefulWidget {
   final String sessionId;
@@ -35,7 +36,7 @@ class _LiveMonitorViewState extends State<LiveMonitorView>
 
   SessionModel? _session;
   Timer? _timer;
-  final RxList<UserModel> _sessionStudents = <UserModel>[].obs;
+  final RxMap<String, List<UserModel>> _studentsByClass = <String, List<UserModel>>{}.obs;
   bool _isLoadingQR = false;
 
   late AnimationController _pulseController;
@@ -88,12 +89,12 @@ class _LiveMonitorViewState extends State<LiveMonitorView>
 
     // Charger les étudiants des classes de la séance
     if (_session != null) {
-      final List<UserModel> allStudents = [];
+      final Map<String, List<UserModel>> groupedStudents = {};
       for (final classId in _session!.classeIds) {
         final students = await _authService.getStudentsByClass(classId);
-        allStudents.addAll(students);
+        groupedStudents[classId] = students;
       }
-      _sessionStudents.assignAll(allStudents);
+      _studentsByClass.assignAll(groupedStudents);
 
       // Charger le QR Code du lieu si mode SCAN_QR
       if (_session!.mode == SessionMode.SCAN_QR) {}
@@ -140,9 +141,10 @@ class _LiveMonitorViewState extends State<LiveMonitorView>
             if (_session!.mode == SessionMode.GPS) _buildGPSCallIndicator(),
             const SizedBox(height: 20),
             _buildStatsRow(),
+            const SizedBox(height: 10),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _buildCompactAttendanceSheet(),
+              child: _buildClassesGrid(),
             ),
             const SizedBox(height: 40),
           ],
@@ -244,17 +246,19 @@ class _LiveMonitorViewState extends State<LiveMonitorView>
       final attendances = _attendanceController.attendances;
       final presentCount =
           attendances.where((a) => a.statut == AttendanceStatus.PRESENT).length;
-      final total = _sessionStudents.length;
+      
+      int total = 0;
+      _studentsByClass.values.forEach((list) => total += list.length);
 
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
         child: Row(
           children: [
-            _buildSmallStat("Inscrits", "$total", Colors.blueGrey),
+            _buildSmallStat("Global Inscrits", "$total", Colors.blueGrey),
             const SizedBox(width: 12),
-            _buildSmallStat("Présents", "$presentCount", Colors.green),
+            _buildSmallStat("Global Présents", "$presentCount", Colors.green),
             const SizedBox(width: 12),
-            _buildSmallStat("Absents", "${total - presentCount}", Colors.red),
+            _buildSmallStat("Global Absents", "${total - presentCount}", Colors.red),
           ],
         ),
       );
@@ -290,89 +294,134 @@ class _LiveMonitorViewState extends State<LiveMonitorView>
     );
   }
 
-  Widget _buildCompactAttendanceSheet() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.withOpacity(0.1)),
-      ),
-      child: Column(
+  Widget _buildClassesGrid() {
+    return Obx(() {
+      if (_studentsByClass.isEmpty) {
+        return const Center(child: CircularProgressIndicator());
+      }
+
+      final classes = _session!.classes ?? [];
+      final attendances = _attendanceController.attendances;
+
+      return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.grey.withOpacity(0.05),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(16),
-              ),
-            ),
-            child: const Text(
-              "FICHE D'ÉMARGEMENT",
+          Padding(
+            padding: const EdgeInsets.only(left: 8.0, bottom: 12.0),
+            child: Text(
+              "SÉLECTIONNER UNE CLASSE POUR L'APPEL",
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 11,
-                letterSpacing: 1.5,
+                letterSpacing: 1.2,
+                color: AppColors.textSecondary,
               ),
             ),
           ),
-          Obx(() {
-            final students = _sessionStudents;
-            final attendances = _attendanceController.attendances;
-
-            return ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: students.length,
-              itemBuilder: (context, index) {
-                final student = students[index];
-                final att = attendances.firstWhereOrNull(
-                  (a) => a.etudiantId == student.id,
-                );
-                final isPresent = att?.statut == AttendanceStatus.PRESENT;
-                return _buildCompactRow(student, isPresent, index + 1);
-              },
-            );
-          }),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.1,
+            ),
+            itemCount: _session!.classeIds.length,
+            itemBuilder: (context, index) {
+              final classId = _session!.classeIds[index];
+              final classObj = classes.firstWhereOrNull((c) => c.id == classId) ?? 
+                              _authController.classes.firstWhereOrNull((c) => c.id == classId) ??
+                              ClassModel(id: classId, nom: "Classe $classId", niveau: "", parcours: "");
+              
+              final classStudents = _studentsByClass[classId] ?? [];
+              final studentIds = classStudents.map((s) => s.id).toSet();
+              final presentCount = attendances.where((a) => studentIds.contains(a.etudiantId) && a.statut == AttendanceStatus.PRESENT).length;
+              
+              return _buildClassCard(classObj, classStudents, presentCount);
+            },
+          ),
         ],
-      ),
-    );
+      );
+    });
   }
 
-  Widget _buildCompactRow(UserModel student, bool isPresent, int number) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Colors.grey.withOpacity(0.1), width: 0.5),
+  Widget _buildClassCard(ClassModel classObj, List<UserModel> students, int presentCount) {
+    final total = students.length;
+    final percent = total > 0 ? (presentCount / total) * 100 : 0.0;
+
+    return InkWell(
+      onTap: () {
+        Get.to(() => ClassAttendanceMonitorView(
+          sessionId: widget.sessionId,
+          classModel: classObj,
+          students: students,
+        ));
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 25,
-            child: Text(
-              "$number.",
-              style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  classObj.nom,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                Text(
+                  "${classObj.niveau} ${classObj.parcours}",
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                ),
+              ],
             ),
-          ),
-          Expanded(
-            child: Text(
-              "${student.nom.toUpperCase()} ${student.prenom}",
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: isPresent ? FontWeight.bold : FontWeight.w500,
-                color: isPresent ? AppColors.primary : AppColors.textPrimary,
-              ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "$presentCount/$total",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: percent > 50 ? Colors.green : AppColors.primary,
+                      ),
+                    ),
+                    Text(
+                      "${percent.toInt()}%",
+                      style: const TextStyle(fontSize: 10, color: Colors.grey),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: LinearProgressIndicator(
+                    value: total > 0 ? presentCount / total : 0,
+                    backgroundColor: Colors.grey.withOpacity(0.1),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      percent > 50 ? Colors.green : AppColors.primary,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          Icon(
-            isPresent ? Icons.check_circle : Icons.circle_outlined,
-            color: isPresent ? Colors.green : Colors.grey.withOpacity(0.3),
-            size: 18,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -507,24 +556,16 @@ class _LiveMonitorViewState extends State<LiveMonitorView>
   }
 
   void _endSession() {
-    final isManualMode = _session!.mode == SessionMode.MANUEL;
     AppModal.showConfirmation(
       context: context,
       title: "Clôturer la séance",
-      message:
-          isManualMode
-              ? "Voulez-vous commencer l'appel manuel ?"
-              : "Voulez-vous vraiment terminer cette séance ?",
-      confirmText: isManualMode ? "Appel Manuel" : "Confirmer",
+      message: "Voulez-vous vraiment terminer cette séance ?\nLes statistiques finales seront générées.",
+      confirmText: "Confirmer",
       onConfirm: () async {
         final success = await _sessionController.endSession(widget.sessionId);
         if (success) {
-          if (isManualMode) {
-            Get.off(() => ManualAttendanceView(sessionId: widget.sessionId));
-          } else {
-            Get.back();
-            AppUtils.showSuccessToast("Séance clôturée");
-          }
+          Get.off(() => SessionRecapView(sessionId: widget.sessionId));
+          AppUtils.showSuccessToast("Séance clôturée");
         }
       },
     );
