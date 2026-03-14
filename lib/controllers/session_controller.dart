@@ -103,7 +103,7 @@ class SessionController extends GetxController {
     }
   }
 
-  Future<bool> createSession({
+  Future<SessionModel?> createSession({
     String? matiereId,
     required String matiere,
     required String lieuId,
@@ -128,16 +128,15 @@ class SessionController extends GetxController {
         heureDebut: heureDebut,
         heureFin: heureFin,
         margeTolerance: margeTolerance,
-        // Le QR Code est maintenant lié au lieu, pas à la séance
         qrCode: null,
       );
 
       final success = await _authService.createSession(newSession);
       if (success) {
         await fetchSessions();
-        return true;
+        return newSession;
       }
-      return false;
+      return null;
     } finally {
       isLoading.value = false;
     }
@@ -226,6 +225,22 @@ class SessionController extends GetxController {
           activeSessions.refresh();
           return true;
         }
+      }
+      return false;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+  Future<bool> deleteSession(String sessionId) async {
+    isLoading.value = true;
+    try {
+      final success = await _authService.deleteSession(sessionId);
+      if (success) {
+        sessions.removeWhere((s) => s.id == sessionId);
+        activeSessions.removeWhere((s) => s.id == sessionId);
+        sessions.refresh();
+        activeSessions.refresh();
+        return true;
       }
       return false;
     } finally {

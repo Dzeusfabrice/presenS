@@ -12,6 +12,7 @@ import 'class_management_view.dart';
 import 'export_management_view.dart';
 import 'settings_management_view.dart';
 import 'academic_reference_view.dart';
+import 'location_qr_view.dart';
 
 class AdminDashboard extends StatelessWidget {
   const AdminDashboard({Key? key}) : super(key: key);
@@ -389,6 +390,13 @@ class AdminDashboard extends StatelessWidget {
         subtitle: "Rapports & Data",
         color: Colors.purple,
         onTap: () => Get.to(() => ExportManagementView()),
+      ),
+      _MenuItemData(
+        icon: Icons.qr_code_2_rounded,
+        title: "Générateur QR",
+        subtitle: "Salles & Lieux",
+        color: Colors.teal,
+        onTap: () => Get.to(() => const LocationQrView()),
       ),
     // _MenuItemData(
     //   icon: Icons.settings_rounded,

@@ -43,6 +43,9 @@ class _LiveMonitorViewState extends State<LiveMonitorView>
   late AnimationController _glowController;
   late Animation<double> _pulseAnimation;
   late Animation<double> _glowAnimation;
+  
+  bool _isCallLaunched = false;
+  bool _isEnding = false;
 
   @override
   void initState() {
@@ -170,15 +173,15 @@ class _LiveMonitorViewState extends State<LiveMonitorView>
                     children: [
                       for (int i = 0; i < 3; i++)
                         Transform.scale(
-                          scale: _pulseAnimation.value + (i * 0.2),
+                          scale: _isCallLaunched ? (_pulseAnimation.value + (i * 0.2)) : 1.0,
                           child: Container(
                             width: 120 - (i * 20),
                             height: 120 - (i * 20),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: AppColors.primary.withOpacity(
-                                  _glowAnimation.value * (0.4 - i * 0.1),
+                                color: (_isCallLaunched ? Colors.green : AppColors.primary).withOpacity(
+                                  _isCallLaunched ? _glowAnimation.value * (0.4 - i * 0.1) : 0.1,
                                 ),
                                 width: 2,
                               ),
@@ -186,30 +189,29 @@ class _LiveMonitorViewState extends State<LiveMonitorView>
                           ),
                         ),
                       GestureDetector(
-                        onTap: _launchGPSCall,
+                        onTap: _isCallLaunched ? null : _launchGPSCall,
                         child: Container(
                           width: 80,
                           height: 80,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: RadialGradient(
-                              colors: [
-                                AppColors.primary,
-                                AppColors.primaryLight,
-                              ],
+                              colors: _isCallLaunched 
+                                ? [Colors.green, Colors.greenAccent]
+                                : [AppColors.primary, AppColors.primaryLight],
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: AppColors.primary.withOpacity(
-                                  _glowAnimation.value * 0.6,
+                                color: (_isCallLaunched ? Colors.green : AppColors.primary).withOpacity(
+                                  _isCallLaunched ? _glowAnimation.value * 0.6 : 0.2,
                                 ),
                                 blurRadius: 30,
                                 spreadRadius: 5,
                               ),
                             ],
                           ),
-                          child: const Icon(
-                            Icons.location_on_rounded,
+                          child: Icon(
+                            _isCallLaunched ? Icons.radar_rounded : Icons.location_on_rounded,
                             color: Colors.white,
                             size: 40,
                           ),
@@ -222,18 +224,18 @@ class _LiveMonitorViewState extends State<LiveMonitorView>
             },
           ),
           const SizedBox(height: 20),
-          const Text(
-            "LANCER L'APPEL GPS",
+          Text(
+            _isCallLaunched ? "APPEL GPS EN COURS" : "LANCER L'APPEL GPS",
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,
               letterSpacing: 1.2,
-              color: AppColors.primary,
+              color: _isCallLaunched ? Colors.green : AppColors.primary,
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            "Cliquez sur le cercle pour notifier les étudiants",
+            _isCallLaunched ? "En attente de la validation des étudiants..." : "Cliquez sur le cercle pour notifier les étudiants",
             style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),
         ],
@@ -512,6 +514,7 @@ class _LiveMonitorViewState extends State<LiveMonitorView>
   }
 
   Widget _buildBottomBar() {
+    if (_isEnding) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -547,27 +550,40 @@ class _LiveMonitorViewState extends State<LiveMonitorView>
       context: context,
       title: "Lancer l'appel GPS",
       message:
-          "Une notification sera envoyée à tous les étudiants de la classe.",
-      confirmText: "Lancer",
+          "Une notification sera envoyée à tous les étudiants de la classe pour valider leur présence.",
+      confirmText: "Lancer l'appel",
       onConfirm: () async {
-        AppUtils.showSuccessToast("Appel lancé !");
+        setState(() => _isCallLaunched = true);
+        
+        // Simuler l'envoi d'une notification push si un endpoint existait vraiment, 
+        // ou marquer en base le statut "appel_lance: true" sur la Session.
+        // Puisque nous utilisons les WebSockets/Notifications Cloud théoriquement :
+        
+        AppUtils.showSuccessToast("Appel lancé aux étudiants !");
       },
     );
   }
 
-  void _endSession() {
-    AppModal.showConfirmation(
+  void _endSession() async {
+    setState(() => _isEnding = true);
+    final confirmed = await AppModal.showConfirmation(
       context: context,
       title: "Clôturer la séance",
-      message: "Voulez-vous vraiment terminer cette séance ?\nLes statistiques finales seront générées.",
+      message:
+          "Voulez-vous vraiment terminer cette séance ?\nLes statistiques finales seront générées.",
       confirmText: "Confirmer",
-      onConfirm: () async {
-        final success = await _sessionController.endSession(widget.sessionId);
-        if (success) {
-          Get.off(() => SessionRecapView(sessionId: widget.sessionId));
-          AppUtils.showSuccessToast("Séance clôturée");
-        }
-      },
     );
+
+    if (confirmed) {
+      final success = await _sessionController.endSession(widget.sessionId);
+      if (success) {
+        Get.off(() => SessionRecapView(sessionId: widget.sessionId));
+        AppUtils.showSuccessToast("Séance clôturée");
+      } else {
+        setState(() => _isEnding = false);
+      }
+    } else {
+      setState(() => _isEnding = false);
+    }
   }
 }

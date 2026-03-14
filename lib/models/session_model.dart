@@ -80,7 +80,7 @@ class SessionModel {
     return SessionModel(
       id: json['id'] ?? '',
       matiereId: json['matiere_id'],
-      matiere: json['matiere'] ?? json['nom_matiere'] ?? '',
+      matiere: json['matiere'] ?? json['matiere_nom'] ?? json['nom_matiere'] ?? '',
       enseignantId: json['enseignant_id'] ?? '',
       lieuId: json['lieu_id'] ?? '',
       classeIds: classesIds,

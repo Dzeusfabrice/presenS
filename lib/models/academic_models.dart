@@ -7,7 +7,7 @@ class AcademicYearModel {
   factory AcademicYearModel.fromJson(Map<String, dynamic> json) {
     return AcademicYearModel(
       id: json['id']?.toString() ?? '',
-      nom: json['annee']?.toString() ?? json['nom']?.toString() ?? '',
+      nom: json['libelle']?.toString() ?? json['annee']?.toString() ?? json['nom']?.toString() ?? '',
     );
   }
 }

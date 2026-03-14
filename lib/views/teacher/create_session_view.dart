@@ -35,6 +35,7 @@ class _CreateSessionViewState extends State<CreateSessionView> {
     super.initState();
     _authController.fetchLocations();
     _authController.fetchClasses();
+    _authController.fetchAcademicData(); // S'assurer que les matières sont là
   }
 
   @override
@@ -713,7 +714,7 @@ class _CreateSessionViewState extends State<CreateSessionView> {
 
     int margeTol = int.tryParse(_toleranceController.text) ?? 15;
 
-    final success = await _sessionController.createSession(
+    final sessionCreated = await _sessionController.createSession(
       matiereId: _selectedMatterId,
       matiere:
           _authController.matters
@@ -727,21 +728,18 @@ class _CreateSessionViewState extends State<CreateSessionView> {
       margeTolerance: margeTol,
     );
 
-    if (success) {
-      if (_sessionController.sessions.isNotEmpty) {
-        final sessionCreated = _sessionController.sessions.last;
-        await _sessionController.startSession(sessionCreated.id);
+    if (sessionCreated != null) {
+      await _sessionController.startSession(sessionCreated.id);
 
-        Get.off(() => LiveMonitorView(sessionId: sessionCreated.id));
+      Get.off(() => LiveMonitorView(sessionId: sessionCreated.id));
 
-        Get.snackbar(
-          "Séance Lancée",
-          "Notifications envoyées aux étudiants",
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-          snackPosition: SnackPosition.BOTTOM,
-        );
-      }
+      Get.snackbar(
+        "Séance Lancée",
+        "Notifications envoyées aux étudiants",
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM,
+      );
     }
   }
 }

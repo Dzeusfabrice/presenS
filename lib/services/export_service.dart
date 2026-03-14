@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -7,6 +8,10 @@ import 'package:http/http.dart' as http;
 import '../core/api/api_endpoints.dart';
 import '../core/utils/app_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:excel/excel.dart' as excel_lib;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:csv/csv.dart';
 
 class ExportService {
   // Méthode générique pour télécharger un fichier
@@ -50,20 +55,37 @@ class ExportService {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token');
 
+      print('📤 Demande d\'exportation vers: $url');
       final response = await http.get(
         Uri.parse(url),
         headers: ApiEndpoints.getHeaders(token),
       );
 
+      print('📥 Réponse exportation [${response.statusCode}]');
+
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final extension = format.toLowerCase() == 'excel' || format.toLowerCase() == 'csv'
-            ? (format.toLowerCase() == 'csv' ? 'csv' : 'xlsx')
-            : 'pdf';
+        Uint8List finalBytes;
+        String extension;
+
+        final lowerFormat = format.toLowerCase();
+
+        // Si le backend renvoie du CSV mais que l'utilisateur veut un autre format
+        if (lowerFormat == 'excel' || lowerFormat == 'xlsx') {
+          extension = 'xlsx';
+          finalBytes = _convertCsvToExcel(response.body);
+        } else if (lowerFormat == 'pdf') {
+          extension = 'pdf';
+          finalBytes = await _convertCsvToPdf(response.body, fileName);
+        } else {
+          extension = 'csv';
+          finalBytes = response.bodyBytes;
+        }
+
         final finalFileName =
             '${fileName}_${DateTime.now().millisecondsSinceEpoch}.$extension';
         final file = File('$presenSDirPath/$finalFileName');
 
-        await file.writeAsBytes(response.bodyBytes);
+        await file.writeAsBytes(finalBytes);
 
         Get.snackbar(
           "Succès ✅",
@@ -74,11 +96,13 @@ class ExportService {
         );
         return true;
       } else {
+        print('❌ Échec de l\'exportation [${response.statusCode}]: ${response.body}');
         throw Exception(
           "Erreur serveur : ${response.statusCode} - ${response.body}",
         );
       }
     } catch (e) {
+      print('❌ Erreur critique lors de l\'exportation: $e');
       AppUtils.handleError(e);
       Get.snackbar(
         "Erreur d'exportation ❌",
@@ -92,7 +116,7 @@ class ExportService {
   }
 
   // Export des étudiants
-  Future<bool> exportStudents(String format) async {
+  Future<bool> exportStudents(String format, {String? classId}) async {
     Get.snackbar(
       "Exportation en cours...",
       "Téléchargement de la liste des étudiants en format $format",
@@ -101,8 +125,8 @@ class ExportService {
     );
 
     return await _downloadFile(
-      url: ApiEndpoints.exportStudents(format.toLowerCase()),
-      fileName: 'Liste_Etudiants',
+      url: ApiEndpoints.exportStudents(format.toLowerCase(), classId: classId),
+      fileName: classId != null ? 'Liste_Etudiants_$classId' : 'Liste_Etudiants',
       format: format,
     );
   }
@@ -140,7 +164,7 @@ class ExportService {
   }
 
   // Export des rapports de présence
-  Future<bool> exportAttendance(String format) async {
+  Future<bool> exportAttendance(String format, {String? classId}) async {
     Get.snackbar(
       "Exportation en cours...",
       "Téléchargement du rapport de présence en format $format",
@@ -149,8 +173,40 @@ class ExportService {
     );
 
     return await _downloadFile(
-      url: ApiEndpoints.exportAttendance(format.toLowerCase()),
-      fileName: 'Rapport_Presence_Global',
+      url: ApiEndpoints.exportAttendance(format.toLowerCase(), classId: classId),
+      fileName: classId != null ? 'Rapport_Presence_$classId' : 'Rapport_Presence_Global',
+      format: format,
+    );
+  }
+
+  // Export du Bilan de Classe (Toutes les séances)
+  Future<bool> exportClassReport(String format, String classId) async {
+    Get.snackbar(
+      "Exportation en cours...",
+      "Téléchargement du bilan de classe en format $format",
+      backgroundColor: Colors.blue,
+      colorText: Colors.white,
+    );
+
+    return await _downloadFile(
+      url: ApiEndpoints.classReport(classId, format.toLowerCase()),
+      fileName: 'Bilan_Classe_$classId',
+      format: format,
+    );
+  }
+
+  // Export de l'Historique d'un Étudiant
+  Future<bool> exportStudentReport(String format, String studentId) async {
+    Get.snackbar(
+      "Exportation en cours...",
+      "Téléchargement de l'historique étudiant en format $format",
+      backgroundColor: Colors.blue,
+      colorText: Colors.white,
+    );
+
+    return await _downloadFile(
+      url: ApiEndpoints.studentReport(studentId, format.toLowerCase()),
+      fileName: 'Historique_Etudiant_$studentId',
       format: format,
     );
   }
@@ -201,21 +257,42 @@ class ExportService {
       final token = prefs.getString('auth_token');
 
       final url = Uri.parse(
-        "${ApiEndpoints.exportReport(sessionId)}?format=${format.toLowerCase()}",
+        ApiEndpoints.exportReport(sessionId, format.toLowerCase()),
       );
 
+      print('📤 Demande de rapport vers: $url');
       final response = await http.get(
         url,
         headers: ApiEndpoints.getHeaders(token),
       );
 
+      print('📥 Réponse rapport [${response.statusCode}]');
+
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final extension = format.toLowerCase() == 'excel' ? 'xlsx' : 'pdf';
+        Uint8List finalBytes;
+        String extension;
+
+        final lowerFormat = format.toLowerCase();
+
+        if (lowerFormat == 'excel' || lowerFormat == 'xlsx') {
+          extension = 'xlsx';
+          finalBytes = _convertCsvToExcel(response.body);
+        } else if (lowerFormat == 'pdf') {
+          extension = 'pdf';
+          finalBytes = await _convertCsvToPdf(
+            response.body,
+            "Rapport_Presence_$sessionId",
+          );
+        } else {
+          extension = 'csv';
+          finalBytes = response.bodyBytes;
+        }
+
         final fileName =
             'Presence_${sessionId}_${DateTime.now().millisecondsSinceEpoch}.$extension';
         final file = File('$jenesisDirPath/$fileName');
 
-        await file.writeAsBytes(response.bodyBytes);
+        await file.writeAsBytes(finalBytes);
 
         Get.snackbar(
           "Succès ✅",
@@ -225,11 +302,13 @@ class ExportService {
           duration: const Duration(seconds: 5),
         );
       } else {
+        print('❌ Échec du téléchargement du rapport [${response.statusCode}]: ${response.body}');
         throw Exception(
           "Erreur serveur : ${response.statusCode} - ${response.body}",
         );
       }
     } catch (e) {
+      print('❌ Erreur critique lors du téléchargement du rapport: $e');
       AppUtils.handleError(e);
       Get.snackbar(
         "Erreur d'exportation ❌",
@@ -239,5 +318,82 @@ class ExportService {
         duration: const Duration(seconds: 5),
       );
     }
+  }
+
+  // Helper pour convertir CSV en Excel (.xlsx)
+  Uint8List _convertCsvToExcel(String csvData) {
+    var excel = excel_lib.Excel.createExcel();
+    var sheet = excel['Sheet1'];
+
+    List<List<dynamic>> rows = const CsvToListConverter().convert(csvData);
+
+    for (var i = 0; i < rows.length; i++) {
+      for (var j = 0; j < rows[i].length; j++) {
+        var cell = sheet.cell(
+          excel_lib.CellIndex.indexByColumnRow(columnIndex: j, rowIndex: i),
+        );
+        cell.value = excel_lib.TextCellValue(rows[i][j].toString());
+      }
+    }
+
+    final bytes = excel.save();
+    return Uint8List.fromList(bytes!);
+  }
+
+  // Helper pour convertir CSV en PDF
+  Future<Uint8List> _convertCsvToPdf(String csvData, String title) async {
+    final pdf = pw.Document();
+    List<List<dynamic>> rows = const CsvToListConverter().convert(csvData);
+
+    if (rows.isEmpty) return Uint8List(0);
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build:
+            (context) => [
+              pw.Header(
+                level: 0,
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      title.replaceAll('_', ' '),
+                      style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                    pw.Text(DateTime.now().toString().split('.')[0]),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              pw.TableHelper.fromTextArray(
+                headerStyle: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.white,
+                ),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.blueGrey800,
+                ),
+                cellHeight: 30,
+                cellAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.centerLeft,
+                },
+                data:
+                    rows
+                        .map(
+                          (row) => row.map((cell) => cell.toString()).toList(),
+                        )
+                        .toList(),
+              ),
+            ],
+      ),
+    );
+
+    return await pdf.save();
   }
 }

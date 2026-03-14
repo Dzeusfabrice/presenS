@@ -10,6 +10,8 @@ import '../../core/widgets/app_modal.dart';
 import '../../models/user_model.dart';
 import '../../models/class_model.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:excel/excel.dart' as excel_lib;
+import 'dart:typed_data';
 
 class UserManagementView extends StatefulWidget {
   const UserManagementView({Key? key}) : super(key: key);
@@ -21,7 +23,9 @@ class UserManagementView extends StatefulWidget {
 class _UserManagementViewState extends State<UserManagementView>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final UserManagementController controller = Get.put(UserManagementController());
+  final UserManagementController controller = Get.put(
+    UserManagementController(),
+  );
   final AuthController _authController = Get.find<AuthController>();
   final TextEditingController _searchController = TextEditingController();
 
@@ -58,17 +62,45 @@ class _UserManagementViewState extends State<UserManagementView>
         actions: [
           if (_tabController.index == 1)
             PopupMenuButton<String>(
+              icon: const Icon(Icons.file_upload_rounded),
               onSelected: (value) {
                 if (value == 'import_csv') {
                   _importStudentsFromCSV(context);
+                } else if (value == 'import_excel') {
+                  _importStudentsFromExcel(context);
                 }
               },
-              itemBuilder: (BuildContext context) => [
-                const PopupMenuItem<String>(
-                  value: 'import_csv',
-                  child: Text('Importer CSV Étudiants'),
-                ),
-              ],
+              itemBuilder:
+                  (BuildContext context) => [
+                    const PopupMenuItem<String>(
+                      value: 'import_csv',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.table_chart_outlined,
+                            size: 20,
+                            color: Colors.orange,
+                          ),
+                          SizedBox(width: 8),
+                          Text('Importer CSV'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'import_excel',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.table_view_outlined,
+                            size: 20,
+                            color: Colors.green,
+                          ),
+                          SizedBox(width: 8),
+                          Text('Importer Excel (.xlsx)'),
+                        ],
+                      ),
+                    ),
+                  ],
             ),
         ],
         bottom: TabBar(
@@ -111,35 +143,50 @@ class _UserManagementViewState extends State<UserManagementView>
 
       // Si c'est un étudiant et qu'un filtre de classe est sélectionné, filtrer par classe
       // Filtrer par filière
-      if (role == UserRole.ETUDIANT && controller.selectedFiliereFilter.value != null) {
-        filteredUsers = filteredUsers.where((u) {
-          final cls = controller.classes.firstWhereOrNull((c) => c.id == u.classeId) as ClassModel?;
-          return cls?.filiereId == controller.selectedFiliereFilter.value;
-        }).toList();
+      if (role == UserRole.ETUDIANT &&
+          controller.selectedFiliereFilter.value != null) {
+        filteredUsers =
+            filteredUsers.where((u) {
+              final cls =
+                  controller.classes.firstWhereOrNull((c) => c.id == u.classeId)
+                      as ClassModel?;
+              return cls?.filiereId == controller.selectedFiliereFilter.value;
+            }).toList();
       }
 
       // Filtrer par niveau
-      if (role == UserRole.ETUDIANT && controller.selectedLevelFilter.value != null) {
-        filteredUsers = filteredUsers.where((u) {
-          final cls = controller.classes.firstWhereOrNull((c) => c.id == u.classeId) as ClassModel?;
-          return cls?.niveauId == controller.selectedLevelFilter.value;
-        }).toList();
+      if (role == UserRole.ETUDIANT &&
+          controller.selectedLevelFilter.value != null) {
+        filteredUsers =
+            filteredUsers.where((u) {
+              final cls =
+                  controller.classes.firstWhereOrNull((c) => c.id == u.classeId)
+                      as ClassModel?;
+              return cls?.niveauId == controller.selectedLevelFilter.value;
+            }).toList();
       }
 
       // Si c'est un étudiant et qu'un filtre de classe est sélectionné
-      if (role == UserRole.ETUDIANT && controller.selectedClassFilter.value != null) {
-        filteredUsers = filteredUsers.where((u) => u.classeId == controller.selectedClassFilter.value).toList();
+      if (role == UserRole.ETUDIANT &&
+          controller.selectedClassFilter.value != null) {
+        filteredUsers =
+            filteredUsers
+                .where(
+                  (u) => u.classeId == controller.selectedClassFilter.value,
+                )
+                .toList();
       }
 
       // Appliquer la recherche
       if (controller.searchQuery.value.isNotEmpty) {
         final query = controller.searchQuery.value.toLowerCase().trim();
-        filteredUsers = filteredUsers.where((u) {
-          return u.nom.toLowerCase().contains(query) ||
-                 u.prenom.toLowerCase().contains(query) ||
-                 (u.matricule ?? '').toLowerCase().contains(query) ||
-                 u.email.toLowerCase().contains(query);
-        }).toList();
+        filteredUsers =
+            filteredUsers.where((u) {
+              return u.nom.toLowerCase().contains(query) ||
+                  u.prenom.toLowerCase().contains(query) ||
+                  (u.matricule ?? '').toLowerCase().contains(query) ||
+                  u.email.toLowerCase().contains(query);
+            }).toList();
       }
 
       return Column(
@@ -214,7 +261,15 @@ class _UserManagementViewState extends State<UserManagementView>
                         child: _buildMiniDropdown(
                           hint: "Filière",
                           value: controller.selectedFiliereFilter.value,
-                          items: _authController.filieres.map((f) => DropdownMenuItem(value: f.id, child: Text(f.nom))).toList(),
+                          items:
+                              _authController.filieres
+                                  .map(
+                                    (f) => DropdownMenuItem(
+                                      value: f.id,
+                                      child: Text(f.nom),
+                                    ),
+                                  )
+                                  .toList(),
                           onChanged: (val) {
                             controller.selectedFiliereFilter.value = val;
                             controller.selectedClassFilter.value = null;
@@ -226,14 +281,23 @@ class _UserManagementViewState extends State<UserManagementView>
                         child: _buildMiniDropdown(
                           hint: "Niveau",
                           value: controller.selectedLevelFilter.value,
-                          items: _authController.levels.map((l) => DropdownMenuItem(value: l.id, child: Text(l.nom))).toList(),
+                          items:
+                              _authController.levels
+                                  .map(
+                                    (l) => DropdownMenuItem(
+                                      value: l.id,
+                                      child: Text(l.nom),
+                                    ),
+                                  )
+                                  .toList(),
                           onChanged: (val) {
                             controller.selectedLevelFilter.value = val;
                             controller.selectedClassFilter.value = null;
                           },
                         ),
                       ),
-                      if (controller.selectedFiliereFilter.value != null || controller.selectedLevelFilter.value != null)
+                      if (controller.selectedFiliereFilter.value != null ||
+                          controller.selectedLevelFilter.value != null)
                         IconButton(
                           icon: const Icon(Icons.filter_list_off, size: 20),
                           onPressed: () {
@@ -252,32 +316,51 @@ class _UserManagementViewState extends State<UserManagementView>
                       children: [
                         _buildFilterChip(
                           label: "Toutes les classes",
-                          isSelected: controller.selectedClassFilter.value == null,
-                          onSelected: (val) => controller.selectedClassFilter.value = null,
+                          isSelected:
+                              controller.selectedClassFilter.value == null,
+                          onSelected:
+                              (val) =>
+                                  controller.selectedClassFilter.value = null,
                         ),
                         const SizedBox(width: 8),
-                        ...controller.classes.where((c) {
-                          final cls = c as ClassModel;
-                          bool match = true;
-                          if (controller.selectedFiliereFilter.value != null) {
-                            match = match && cls.filiereId == controller.selectedFiliereFilter.value;
-                          }
-                          if (controller.selectedLevelFilter.value != null) {
-                            match = match && cls.niveauId == controller.selectedLevelFilter.value;
-                          }
-                          return match;
-                        }).map((dynamic item) {
-                          final cls = item as ClassModel;
-                          final isSelected = controller.selectedClassFilter.value == cls.id;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: _buildFilterChip(
-                              label: cls.nom,
-                              isSelected: isSelected,
-                              onSelected: (val) => controller.selectedClassFilter.value = val ? cls.id : null,
-                            ),
-                          );
-                        }).toList(),
+                        ...controller.classes
+                            .where((c) {
+                              final cls = c as ClassModel;
+                              bool match = true;
+                              if (controller.selectedFiliereFilter.value !=
+                                  null) {
+                                match =
+                                    match &&
+                                    cls.filiereId ==
+                                        controller.selectedFiliereFilter.value;
+                              }
+                              if (controller.selectedLevelFilter.value !=
+                                  null) {
+                                match =
+                                    match &&
+                                    cls.niveauId ==
+                                        controller.selectedLevelFilter.value;
+                              }
+                              return match;
+                            })
+                            .map((dynamic item) {
+                              final cls = item as ClassModel;
+                              final isSelected =
+                                  controller.selectedClassFilter.value ==
+                                  cls.id;
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: _buildFilterChip(
+                                  label: cls.nom,
+                                  isSelected: isSelected,
+                                  onSelected:
+                                      (val) =>
+                                          controller.selectedClassFilter.value =
+                                              val ? cls.id : null,
+                                ),
+                              );
+                            })
+                            .toList(),
                       ],
                     ),
                   ),
@@ -1153,7 +1236,13 @@ class _UserManagementViewState extends State<UserManagementView>
         child: DropdownButton<String>(
           value: value,
           isExpanded: true,
-          hint: Text(hint, style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+          hint: Text(
+            hint,
+            style: GoogleFonts.outfit(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
           items: items,
           onChanged: onChanged,
           style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textPrimary),
@@ -1215,44 +1304,154 @@ class _UserManagementViewState extends State<UserManagementView>
     );
   }
 
+  void _importStudentsFromExcel(BuildContext context) async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xlsx'],
+        withData: true,
+      );
+
+      if (result != null && result.files.first.bytes != null) {
+        final bytes = result.files.first.bytes!;
+        var excel = excel_lib.Excel.decodeBytes(bytes);
+
+        List<UserModel> students = [];
+        // On prend la première feuille
+        String sheetName = excel.tables.keys.first;
+        var table = excel.tables[sheetName];
+
+        if (table == null || table.maxRows <= 1) {
+          AppUtils.showErrorToast("Le fichier Excel est vide ou invalide");
+          return;
+        }
+
+        // Colonnes attendues : Nom (0), Prénom (1), Email (2), Matricule (3), ClasseId (4), Niveau (5), Parcours (6)
+        for (int i = 1; i < table.maxRows; i++) {
+          var row = table.rows[i];
+          if (row.length < 4) continue;
+
+          final student = UserModel(
+            id: '',
+            nom: row[0]?.value?.toString() ?? '',
+            prenom: row[1]?.value?.toString() ?? '',
+            email: row[2]?.value?.toString() ?? '',
+            role: UserRole.ETUDIANT,
+            matricule: row[3]?.value?.toString() ?? '',
+            classeId: row.length > 4 ? row[4]?.value?.toString() ?? '' : '',
+            niveau: row.length > 5 ? row[5]?.value?.toString() ?? '' : '',
+            parcours: row.length > 6 ? row[6]?.value?.toString() ?? '' : '',
+          );
+
+          if (student.email.isNotEmpty && student.nom.isNotEmpty) {
+            students.add(student);
+          }
+        }
+
+        if (students.isEmpty) {
+          AppUtils.showErrorToast("Aucun étudiant valide trouvé dans le Excel");
+          return;
+        }
+
+        _confirmBulkImport(context, students);
+      }
+    } catch (e) {
+      AppUtils.showErrorToast("Erreur lors de l'import Excel: $e");
+    }
+  }
+
+  void _confirmBulkImport(
+    BuildContext context,
+    List<UserModel> students,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text(
+              "Confirmer l'import",
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            ),
+            content: Text(
+              "Voulez-vous importer ${students.length} étudiant(s) via l'API bulk ?",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text(
+                  "Annuler",
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                ),
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text(
+                  "Importer tout",
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+    );
+
+    if (confirmed == true) {
+      AppUtils.showLoading("Importation massive en cours...");
+      final success = await controller.addUsersBulk(students);
+      Get.back(); // Close loading
+
+      if (success) {
+        AppUtils.showSuccessToast(
+          "${students.length} étudiant(s) importé(s) avec succès",
+        );
+      } else {
+        AppUtils.showErrorToast(
+          "L'importation massive a échoué sur le serveur",
+        );
+      }
+    }
+  }
+
   void _importStudentsFromCSV(BuildContext context) async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['csv'],
+        withData: true,
       );
 
-      if (result != null) {
-        final file = result.files.first;
-        final input = String.fromCharCodes(file.bytes!);
-        final fields = CsvToListConverter().convert(input);
+      if (result != null && result.files.first.bytes != null) {
+        final input = String.fromCharCodes(result.files.first.bytes!);
+        final fields = const CsvToListConverter().convert(input);
 
-        if (fields.isEmpty) {
+        if (fields.isEmpty || fields.length <= 1) {
           AppUtils.showErrorToast("Le fichier CSV est vide");
           return;
         }
 
-        // Assuming CSV format: nom,prenom,email,matricule,classeId,niveau,parcours
-        final headers =
-            fields[0].map((e) => e.toString().toLowerCase()).toList();
+        List<UserModel> students = [];
         final dataRows = fields.sublist(1);
 
-        List<UserModel> students = [];
         for (var row in dataRows) {
-          if (row.length < 7) continue; // Skip invalid rows
+          if (row.length < 3) continue;
 
           final student = UserModel(
-            id: '', // Will be set by backend
+            id: '',
             nom: row[0].toString(),
             prenom: row[1].toString(),
             email: row[2].toString(),
             role: UserRole.ETUDIANT,
-            matricule: row[3].toString(),
-            classeId: row[4].toString(),
-            niveau: row[5].toString(),
-            parcours: row[6].toString(),
+            matricule: row.length > 3 ? row[3].toString() : '',
+            classeId: row.length > 4 ? row[4].toString() : '',
+            niveau: row.length > 5 ? row[5].toString() : '',
+            parcours: row.length > 6 ? row[6].toString() : '',
           );
-          students.add(student);
+
+          if (student.email.isNotEmpty) {
+            students.add(student);
+          }
         }
 
         if (students.isEmpty) {
@@ -1260,39 +1459,10 @@ class _UserManagementViewState extends State<UserManagementView>
           return;
         }
 
-        // Show confirmation dialog
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder:
-              (context) => AlertDialog(
-                title: const Text("Confirmer l'import"),
-                content: Text(
-                  "Voulez-vous importer ${students.length} étudiant(s) ?",
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: const Text("Annuler"),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    child: const Text("Importer"),
-                  ),
-                ],
-              ),
-        );
-
-        if (confirmed == true) {
-          final success = await controller.addUsersBulk(students);
-          if (success) {
-            AppUtils.showSuccessToast(
-              "${students.length} étudiant(s) importé(s) avec succès",
-            );
-          }
-        }
+        _confirmBulkImport(context, students);
       }
     } catch (e) {
-      AppUtils.showErrorToast("Erreur lors de l'import: $e");
+      AppUtils.showErrorToast("Erreur lors de l'import CSV: $e");
     }
   }
 }

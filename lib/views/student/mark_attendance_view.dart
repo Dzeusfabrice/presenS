@@ -10,6 +10,7 @@ import '../../controllers/session_controller.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/location_utils.dart';
 import '../../models/session_model.dart';
+import '../../models/attendance_model.dart';
 
 class MarkAttendanceView extends StatefulWidget {
   final String? preSelectedSessionId;
@@ -48,14 +49,37 @@ class _MarkAttendanceViewState extends State<MarkAttendanceView> {
     super.dispose();
   }
 
-  void _updateCurrentSession() {
+  void _updateCurrentSession() async {
     if (_selectedSessionId != null) {
       _currentSession = _sessionController.activeSessions.firstWhereOrNull(
         (s) => s.id == _selectedSessionId,
       );
+      // Récupérer l'historique des présences pour vérifier si déjà validé
+      await _attendanceController.fetchAttendanceForSession(
+        _selectedSessionId!,
+      );
+      if (mounted) {
+        setState(() {}); // Rafraîchit l'UI (le bouton se grisera si validé)
+      }
     } else {
-      _currentSession = null;
+      setState(() {
+        _currentSession = null;
+      });
     }
+  }
+
+  bool _hasAlreadyMarkedPresence() {
+    if (_selectedSessionId == null) return false;
+    final currentUserId = _authController.user.value?.id;
+    if (currentUserId == null) return false;
+
+    // Vérifier si une présence avec PRESENT ou RETARD existe déjà pour cet étudiant dans la séance
+    return _attendanceController.attendances.any(
+      (a) =>
+          a.etudiantId == currentUserId &&
+          (a.statut == AttendanceStatus.PRESENT ||
+              a.statut == AttendanceStatus.RETARD),
+    );
   }
 
   /// Démarre le scanner QR pour le mode SCAN_QR
@@ -134,7 +158,9 @@ class _MarkAttendanceViewState extends State<MarkAttendanceView> {
 
       // 6. Vérifier que l'étudiant est dans le rayon autorisé
       final radius = location.radius ?? 50.0; // Rayon par défaut
-      print('📏 Distance: ${distance.toStringAsFixed(1)}m / Rayon max: ${radius}m');
+      print(
+        '📏 Distance: ${distance.toStringAsFixed(1)}m / Rayon max: ${radius}m',
+      );
 
       if (distance > radius) {
         Get.snackbar(
@@ -300,9 +326,7 @@ class _MarkAttendanceViewState extends State<MarkAttendanceView> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        throw Exception(
-          'Les permissions de localisation sont refusées.',
-        );
+        throw Exception('Les permissions de localisation sont refusées.');
       }
     }
 
@@ -439,28 +463,42 @@ class _MarkAttendanceViewState extends State<MarkAttendanceView> {
 
               const SizedBox(height: 20),
 
+              const SizedBox(height: 20),
+
               if (_currentSession?.mode != SessionMode.MANUEL)
-                ElevatedButton(
-                  onPressed: _selectedSessionId == null
-                      ? null
-                      : _currentSession?.mode == SessionMode.SCAN_QR
-                      ? _startQRScanner
-                      : _handleGPSAttendance,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(double.infinity, 56),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: Text(
-                    _currentSession?.mode == SessionMode.SCAN_QR
-                        ? "Scanner le QR Code"
-                        : "Je suis présent (GPS)",
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
+                Builder(
+                  builder: (context) {
+                    final hasAlreadyMarked = _hasAlreadyMarkedPresence();
+                    return ElevatedButton(
+                      onPressed:
+                          (_selectedSessionId == null || hasAlreadyMarked)
+                              ? null // Bouton grisé (null disable le bouton nativement)
+                              : _currentSession?.mode == SessionMode.SCAN_QR
+                              ? _startQRScanner
+                              : _handleGPSAttendance,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            hasAlreadyMarked ? Colors.grey : AppColors.primary,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 56),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        hasAlreadyMarked
+                            ? "Présence déjà validée ✓"
+                            : _currentSession?.mode == SessionMode.SCAN_QR
+                            ? "Scanner le QR Code"
+                            : "Je suis présent (GPS)",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    );
+                  },
                 ),
             ],
           ),
@@ -575,10 +613,7 @@ class _MarkAttendanceViewState extends State<MarkAttendanceView> {
                 SizedBox(height: 8),
                 Text(
                   "Positionnez le code dans le cadre",
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
                   textAlign: TextAlign.center,
                 ),
               ],

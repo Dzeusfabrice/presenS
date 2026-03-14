@@ -12,8 +12,17 @@ import '../../core/widgets/watermark_background.dart';
 import '../../models/session_model.dart';
 import '../../core/widgets/timeline_session_card.dart';
 
-class StudentDashboard extends StatelessWidget {
+import '../../core/widgets/app_modal.dart';
+
+class StudentDashboard extends StatefulWidget {
   const StudentDashboard({Key? key}) : super(key: key);
+
+  @override
+  State<StudentDashboard> createState() => _StudentDashboardState();
+}
+
+class _StudentDashboardState extends State<StudentDashboard> {
+  final Set<String> _notifiedSessionIds = {};
 
   @override
   Widget build(BuildContext context) {
@@ -104,6 +113,18 @@ class StudentDashboard extends StatelessWidget {
                                 (studentClasseId != null &&
                                     s.classeIds.contains(studentClasseId)),
                           );
+
+                      // Afficher le modal si nouveau cours GPS détecté
+                      if (activeGPS != null && !_notifiedSessionIds.contains(activeGPS.id)) {
+                        _notifiedSessionIds.add(activeGPS.id);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          AppModal.showInfo(
+                            context: context,
+                            title: "🚨 Appel Lancé !",
+                            message: "Votre enseignant vient de lancer l'appel pour le cours de ${activeGPS.matiere}. Vous pouvez cliquer sur la carte qui vient d'apparaître pour marquer votre présence par GPS.",
+                          );
+                        });
+                      }
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -326,7 +347,7 @@ class StudentDashboard extends StatelessWidget {
       ),
     );
   }
-}
+} // Fin de la classe
 
 Widget _buildQuickGPSCard(BuildContext context, SessionModel session) {
   return Container(

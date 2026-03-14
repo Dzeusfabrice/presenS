@@ -36,6 +36,98 @@ class AuthController extends GetxController {
     parcours.assignAll(await _authService.getParcours(filiereId));
   }
 
+  // --- CRUD ACADEMIC ---
+
+  Future<bool> addAcademicYear(String nom) async {
+    final success = await _authService.addAcademicYear(nom);
+    if (success) await fetchAcademicData();
+    return success;
+  }
+
+  Future<bool> updateAcademicYear(String id, String nom) async {
+    final success = await _authService.updateAcademicYear(id, nom);
+    if (success) await fetchAcademicData();
+    return success;
+  }
+
+  Future<bool> deleteAcademicYear(String id) async {
+    final success = await _authService.deleteAcademicYear(id);
+    if (success) await fetchAcademicData();
+    return success;
+  }
+
+  Future<bool> addFiliere(String nom) async {
+    final success = await _authService.addFiliere(nom);
+    if (success) await fetchAcademicData();
+    return success;
+  }
+
+  Future<bool> updateFiliere(String id, String nom) async {
+    final success = await _authService.updateFiliere(id, nom);
+    if (success) await fetchAcademicData();
+    return success;
+  }
+
+  Future<bool> deleteFiliere(String id) async {
+    final success = await _authService.deleteFiliere(id);
+    if (success) await fetchAcademicData();
+    return success;
+  }
+
+  Future<bool> addLevel(String nom) async {
+    final success = await _authService.addLevel(nom);
+    if (success) await fetchAcademicData();
+    return success;
+  }
+
+  Future<bool> updateLevel(String id, String nom) async {
+    final success = await _authService.updateLevel(id, nom);
+    if (success) await fetchAcademicData();
+    return success;
+  }
+
+  Future<bool> deleteLevel(String id) async {
+    final success = await _authService.deleteLevel(id);
+    if (success) await fetchAcademicData();
+    return success;
+  }
+
+  Future<bool> addParcours(String nom, String filiereId) async {
+    final success = await _authService.addParcours(nom, filiereId);
+    if (success) await fetchAcademicData();
+    return success;
+  }
+
+  Future<bool> updateParcours(String id, String nom, String filiereId) async {
+    final success = await _authService.updateParcours(id, nom, filiereId);
+    if (success) await fetchAcademicData();
+    return success;
+  }
+
+  Future<bool> deleteParcours(String id) async {
+    final success = await _authService.deleteParcours(id);
+    if (success) await fetchAcademicData();
+    return success;
+  }
+
+  Future<bool> addMatter(String nom, String code) async {
+    final success = await _authService.addMatter(nom, code);
+    if (success) await fetchAcademicData();
+    return success;
+  }
+
+  Future<bool> updateMatter(String id, String nom, String code) async {
+    final success = await _authService.updateMatter(id, nom, code);
+    if (success) await fetchAcademicData();
+    return success;
+  }
+
+  Future<bool> deleteMatter(String id) async {
+    final success = await _authService.deleteMatter(id);
+    if (success) await fetchAcademicData();
+    return success;
+  }
+
   @override
   void onInit() {
     super.onInit();

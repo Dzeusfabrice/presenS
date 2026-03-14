@@ -72,13 +72,13 @@ class _AcademicReferenceViewState extends State<AcademicReferenceView> with Sing
   void _showAddForm() {
     switch (_tabController.index) {
       case 0:
-        _showSimpleForm("Ajouter une Année", (name) => _authService.addAcademicYear(name));
+        _showSimpleForm("Ajouter une Année", (name) => _authService.addAcademicYear(name), hintText: "Ex : 2024-2025");
         break;
       case 1:
-        _showSimpleForm("Ajouter une Filière", (name) => _authService.addFiliere(name));
+        _showSimpleForm("Ajouter une Filière", (name) => _authService.addFiliere(name), hintText: "Ex : Génie Informatique (GIN)");
         break;
       case 2:
-        _showSimpleForm("Ajouter un Niveau", (name) => _authService.addLevel(name));
+        _showSimpleForm("Ajouter un Niveau", (name) => _authService.addLevel(name), hintText: "Ex : L1, Master 2...");
         break;
       case 3:
         _showParcoursForm();
@@ -89,7 +89,7 @@ class _AcademicReferenceViewState extends State<AcademicReferenceView> with Sing
     }
   }
 
-  void _showSimpleForm(String title, Future<bool> Function(String) onSave) {
+  void _showSimpleForm(String title, Future<bool> Function(String) onSave, {String hintText = "Nom"}) {
     final controller = TextEditingController();
     Get.dialog(
       AlertDialog(
@@ -97,7 +97,7 @@ class _AcademicReferenceViewState extends State<AcademicReferenceView> with Sing
         content: TextField(
           controller: controller,
           decoration: InputDecoration(
-            hintText: "Nom",
+            hintText: hintText,
             filled: true,
             fillColor: AppColors.backgroundGrey,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
@@ -113,6 +113,8 @@ class _AcademicReferenceViewState extends State<AcademicReferenceView> with Sing
                 Get.back();
                 _authController.fetchAcademicData();
                 AppUtils.showSuccessToast("Enregistré avec succès");
+              } else {
+                AppUtils.showErrorToast("Erreur lors de l'enregistrement. Vérifiez les informations.");
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),

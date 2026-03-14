@@ -389,15 +389,25 @@ class AuthService {
     }
     try {
       final token = await _getToken();
+      final body = {'users': users.map((u) => u.toJson()).toList()};
+      
+      print('📤 Envoi de la requête BULK vers: ${ApiEndpoints.usersBulk}');
+      print('📋 Nombre d\'utilisateurs: ${users.length}');
+      print('📋 Données envoyées: ${jsonEncode(body)}');
+
       final response = await _client.post(
         Uri.parse(ApiEndpoints.usersBulk),
         headers: ApiEndpoints.getHeaders(token),
-        body: jsonEncode({'users': users.map((u) => u.toJson()).toList()}),
+        body: jsonEncode(body),
       );
+
+      print('📥 Réponse BULK [${response.statusCode}]: ${response.body}');
+
       if (response.statusCode == 201 || response.statusCode == 200) {
+        print('✅ Importation massive réussie');
         return true;
       } else {
-        print('Error adding users bulk [${response.statusCode}]: ${response.body}');
+        print('❌ Échec de l\'importation massive [${response.statusCode}]: ${response.body}');
         try {
           final errorData = jsonDecode(response.body);
           final errorMsg =
@@ -409,7 +419,7 @@ class AuthService {
         return false;
       }
     } catch (e) {
-      print('Error adding users bulk: $e');
+      print('❌ Erreur critique lors de l\'importation massive: $e');
       AppUtils.handleError(e);
       return false;
     }
@@ -1124,11 +1134,19 @@ class AuthService {
   Future<bool> addAcademicYear(String nom) async {
     try {
       final token = await _getToken();
+      final body = jsonEncode({
+        'libelle': nom,
+        'est_actuelle': true,
+      });
+      print('📤 POST ${ApiEndpoints.academicYears} | Body: $body');
+      
       final response = await _client.post(
         Uri.parse(ApiEndpoints.academicYears),
         headers: ApiEndpoints.getHeaders(token),
-        body: jsonEncode({'annee': nom}),
+        body: body,
       );
+      print('📥 Response [${response.statusCode}]: ${response.body}');
+      
       return response.statusCode == 201 || response.statusCode == 200;
     } catch (e) {
       print('Error adding academic year: $e');
@@ -1136,14 +1154,48 @@ class AuthService {
     }
   }
 
+  Future<bool> updateAcademicYear(String id, String nom) async {
+    try {
+      final token = await _getToken();
+      final response = await _client.patch(
+        Uri.parse(ApiEndpoints.academicYearById(id)),
+        headers: ApiEndpoints.getHeaders(token),
+        body: jsonEncode({'libelle': nom}),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Error updating academic year: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteAcademicYear(String id) async {
+    try {
+      final token = await _getToken();
+      final response = await _client.delete(
+        Uri.parse(ApiEndpoints.academicYearById(id)),
+        headers: ApiEndpoints.getHeaders(token),
+      );
+      return response.statusCode == 200 || response.statusCode == 204;
+    } catch (e) {
+      print('Error deleting academic year: $e');
+      return false;
+    }
+  }
+
   Future<bool> addFiliere(String nom) async {
     try {
       final token = await _getToken();
+      final body = jsonEncode({'nom': nom});
+      print('📤 POST ${ApiEndpoints.filieres} | Body: $body');
+      
       final response = await _client.post(
         Uri.parse(ApiEndpoints.filieres),
         headers: ApiEndpoints.getHeaders(token),
-        body: jsonEncode({'nom': nom}),
+        body: body,
       );
+      print('📥 Response [${response.statusCode}]: ${response.body}');
+      
       return response.statusCode == 201 || response.statusCode == 200;
     } catch (e) {
       print('Error adding filiere: $e');
@@ -1155,7 +1207,7 @@ class AuthService {
     try {
       final token = await _getToken();
       final response = await _client.patch(
-        Uri.parse("${ApiEndpoints.filieres}/$id"),
+        Uri.parse(ApiEndpoints.filiereById(id)),
         headers: ApiEndpoints.getHeaders(token),
         body: jsonEncode({'nom': nom}),
       );
@@ -1170,7 +1222,7 @@ class AuthService {
     try {
       final token = await _getToken();
       final response = await _client.delete(
-        Uri.parse("${ApiEndpoints.filieres}/$id"),
+        Uri.parse(ApiEndpoints.filiereById(id)),
         headers: ApiEndpoints.getHeaders(token),
       );
       return response.statusCode == 200 || response.statusCode == 204;
@@ -1183,11 +1235,16 @@ class AuthService {
   Future<bool> addLevel(String nom) async {
     try {
       final token = await _getToken();
+      final body = jsonEncode({'nom': nom});
+      print('📤 POST ${ApiEndpoints.levels} | Body: $body');
+      
       final response = await _client.post(
         Uri.parse(ApiEndpoints.levels),
         headers: ApiEndpoints.getHeaders(token),
-        body: jsonEncode({'nom': nom}),
+        body: body,
       );
+      print('📥 Response [${response.statusCode}]: ${response.body}');
+      
       return response.statusCode == 201 || response.statusCode == 200;
     } catch (e) {
       print('Error adding level: $e');
@@ -1195,14 +1252,48 @@ class AuthService {
     }
   }
 
+  Future<bool> updateLevel(String id, String nom) async {
+    try {
+      final token = await _getToken();
+      final response = await _client.patch(
+        Uri.parse(ApiEndpoints.levelById(id)),
+        headers: ApiEndpoints.getHeaders(token),
+        body: jsonEncode({'nom': nom}),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Error updating level: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteLevel(String id) async {
+    try {
+      final token = await _getToken();
+      final response = await _client.delete(
+        Uri.parse(ApiEndpoints.levelById(id)),
+        headers: ApiEndpoints.getHeaders(token),
+      );
+      return response.statusCode == 200 || response.statusCode == 204;
+    } catch (e) {
+      print('Error deleting level: $e');
+      return false;
+    }
+  }
+
   Future<bool> addParcours(String nom, String filiereId) async {
     try {
       final token = await _getToken();
+      final body = jsonEncode({'nom': nom, 'filiere_id': filiereId});
+      print('📤 POST ${ApiEndpoints.parcours} | Body: $body');
+      
       final response = await _client.post(
-        Uri.parse("${ApiEndpoints.baseUrl}/parcours"),
+        Uri.parse(ApiEndpoints.parcours),
         headers: ApiEndpoints.getHeaders(token),
-        body: jsonEncode({'nom': nom, 'filiere_id': filiereId}),
+        body: body,
       );
+      print('📥 Response [${response.statusCode}]: ${response.body}');
+      
       return response.statusCode == 201 || response.statusCode == 200;
     } catch (e) {
       print('Error adding parcours: $e');
@@ -1210,17 +1301,80 @@ class AuthService {
     }
   }
 
+  Future<bool> updateParcours(String id, String nom, String filiereId) async {
+    try {
+      final token = await _getToken();
+      final response = await _client.patch(
+        Uri.parse(ApiEndpoints.parcoursById(id)),
+        headers: ApiEndpoints.getHeaders(token),
+        body: jsonEncode({'nom': nom, 'filiere_id': filiereId}),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Error updating parcours: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteParcours(String id) async {
+    try {
+      final token = await _getToken();
+      final response = await _client.delete(
+        Uri.parse(ApiEndpoints.parcoursById(id)),
+        headers: ApiEndpoints.getHeaders(token),
+      );
+      return response.statusCode == 200 || response.statusCode == 204;
+    } catch (e) {
+      print('Error deleting parcours: $e');
+      return false;
+    }
+  }
+
   Future<bool> addMatter(String nom, String code) async {
     try {
       final token = await _getToken();
+      final body = jsonEncode({'nom': nom, 'code': code});
+      print('📤 POST ${ApiEndpoints.matters} | Body: $body');
+      
       final response = await _client.post(
         Uri.parse(ApiEndpoints.matters),
         headers: ApiEndpoints.getHeaders(token),
-        body: jsonEncode({'nom': nom, 'code': code}),
+        body: body,
       );
+      print('📥 Response [${response.statusCode}]: ${response.body}');
+      
       return response.statusCode == 201 || response.statusCode == 200;
     } catch (e) {
       print('Error adding matter: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updateMatter(String id, String nom, String code) async {
+    try {
+      final token = await _getToken();
+      final response = await _client.patch(
+        Uri.parse(ApiEndpoints.matterById(id)),
+        headers: ApiEndpoints.getHeaders(token),
+        body: jsonEncode({'nom': nom, 'code': code}),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Error updating matter: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteMatter(String id) async {
+    try {
+      final token = await _getToken();
+      final response = await _client.delete(
+        Uri.parse(ApiEndpoints.matterById(id)),
+        headers: ApiEndpoints.getHeaders(token),
+      );
+      return response.statusCode == 200 || response.statusCode == 204;
+    } catch (e) {
+      print('Error deleting matter: $e');
       return false;
     }
   }
@@ -1274,6 +1428,21 @@ class AuthService {
       return response.statusCode == 200;
     } catch (e) {
       print('Error updating session status: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteSession(String sessionId) async {
+    if (useMock) return true;
+    try {
+      final token = await _getToken();
+      final response = await _client.delete(
+        Uri.parse(ApiEndpoints.sessionById(sessionId)),
+        headers: ApiEndpoints.getHeaders(token),
+      );
+      return response.statusCode == 200 || response.statusCode == 204;
+    } catch (e) {
+      print('Error deleting session: $e');
       return false;
     }
   }

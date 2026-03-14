@@ -1,6 +1,7 @@
 class ApiEndpoints {
-  static const String baseUrl ="https://attendance-backend.presens-app-backend.workers.dev";
-    //   "https://attendance-backend.basilo-store-api.workers.dev";
+  static const String baseUrl =
+      "https://attendance-backend.presens-app-backend.workers.dev";
+  //   "https://attendance-backend.basilo-store-api.workers.dev";
 
   // --- AUTH ---
   static const String register = "$baseUrl/auth/register";
@@ -30,10 +31,21 @@ class ApiEndpoints {
 
   // --- ACADEMIC DATA ---
   static const String academicYears = "$baseUrl/annees";
+  static String academicYearById(String id) => "$baseUrl/annees/$id";
+
   static const String filieres = "$baseUrl/filieres";
+  static String filiereById(String id) => "$baseUrl/filieres/$id";
+
   static const String levels = "$baseUrl/niveaux";
-  static String parcoursByFiliere(String filiereId) => "$baseUrl/parcours?filiere_id=$filiereId";
+  static String levelById(String id) => "$baseUrl/niveaux/$id";
+
   static const String matters = "$baseUrl/matieres";
+  static String matterById(String id) => "$baseUrl/matieres/$id";
+
+  static const String parcours = "$baseUrl/parcours";
+  static String parcoursById(String id) => "$baseUrl/parcours/$id";
+  static String parcoursByFiliere(String filiereId) =>
+      "$parcours?filiere_id=$filiereId";
 
   // --- ATTENDANCE ---
   static const String attendanceMark = "$baseUrl/attendance/mark";
@@ -45,22 +57,32 @@ class ApiEndpoints {
   static String attendanceById(String id) => "$baseUrl/attendance/$id";
 
   // --- REPORTS ---
-  static String exportReport(String sessionId) =>
-      "$baseUrl/reports/export/$sessionId";
-  static String classReport(String classId) =>
-      "$baseUrl/reports/class/$classId";
-  static String studentReport(String studentId) =>
-      "$baseUrl/reports/student/$studentId";
-  
+  static String exportReport(String sessionId, String format) =>
+      "$baseUrl/reports/export/$sessionId?format=$format";
+      
+  static String classReport(String classId, String format) =>
+      "$baseUrl/reports/class/$classId?format=$format";
+      
+  static String studentReport(String studentId, String format) =>
+      "$baseUrl/reports/student/$studentId?format=$format";
+
   // --- EXPORTS ---
-  static String exportStudents(String format) =>
-      "$baseUrl/exports/students?format=$format";
+  static String exportStudents(String format, {String? classId}) =>
+      "$baseUrl/users/export?format=$format&role=ETUDIANT${classId != null ? '&classe_id=$classId' : ''}";
+      
   static String exportTeachers(String format) =>
-      "$baseUrl/exports/teachers?format=$format";
+      "$baseUrl/users/export?format=$format&role=ENSEIGNANT";
+      
   static String exportLocations(String format) =>
-      "$baseUrl/exports/locations?format=$format";
-  static String exportAttendance(String format) =>
-      "$baseUrl/exports/attendance?format=$format";
+      "$baseUrl/users/export?format=$format&role=LOCATIONS"; // Souvent centralisé dans users/export ou une route spécifique
+
+  // Route pour les présences globales (si différente de l'export par classe)
+  static String exportAttendance(String format, {String? classId}) {
+    if (classId != null) {
+      return classReport(classId, format);
+    }
+    return "$baseUrl/users/export?format=$format&type=attendance"; // Ajusté pour éviter le 404 /exports/
+  }
 
   // --- NOTIFICATIONS ---
   static const String sendNotification = "$baseUrl/notifications/send";
