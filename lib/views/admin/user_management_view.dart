@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:csv/csv.dart';
 import '../../controllers/user_management_controller.dart';
 import '../../controllers/auth_controller.dart';
 import '../../core/theme/app_colors.dart';
@@ -10,7 +9,6 @@ import '../../core/widgets/app_modal.dart';
 import '../../models/user_model.dart';
 import '../../models/class_model.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:excel/excel.dart' as excel_lib;
 import 'dart:typed_data';
 
 class UserManagementView extends StatefulWidget {
@@ -65,9 +63,9 @@ class _UserManagementViewState extends State<UserManagementView>
               icon: const Icon(Icons.file_upload_rounded),
               onSelected: (value) {
                 if (value == 'import_csv') {
-                  _importStudentsFromCSV(context);
+                  _pickAndImportFile(context, ['csv']);
                 } else if (value == 'import_excel') {
-                  _importStudentsFromExcel(context);
+                  _pickAndImportFile(context, ['xlsx', 'xls']);
                 }
               },
               itemBuilder:
@@ -1304,165 +1302,82 @@ class _UserManagementViewState extends State<UserManagementView>
     );
   }
 
-  void _importStudentsFromExcel(BuildContext context) async {
+  // --- NOUVEAU SYSTÈME D'IMPORTATION UNIFIÉ ---
+
+  void _pickAndImportFile(BuildContext context, List<String> extensions) async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['xlsx'],
+        allowedExtensions: extensions,
         withData: true,
       );
 
       if (result != null && result.files.first.bytes != null) {
-        final bytes = result.files.first.bytes!;
-        var excel = excel_lib.Excel.decodeBytes(bytes);
+        AppUtils.showLoading("Analyse du fichier...");
+        
+        final students = await controller.processImportFile(result.files.first);
+        
+        Get.back(); // Fermer le loading
 
-        List<UserModel> students = [];
-        // On prend la première feuille
-        String sheetName = excel.tables.keys.first;
-        var table = excel.tables[sheetName];
-
-        if (table == null || table.maxRows <= 1) {
-          AppUtils.showErrorToast("Le fichier Excel est vide ou invalide");
-          return;
+        if (students != null && students.isNotEmpty) {
+          _confirmBulkImport(context, students);
         }
-
-        // Colonnes attendues : Nom (0), Prénom (1), Email (2), Matricule (3), ClasseId (4), Niveau (5), Parcours (6)
-        for (int i = 1; i < table.maxRows; i++) {
-          var row = table.rows[i];
-          if (row.length < 4) continue;
-
-          final student = UserModel(
-            id: '',
-            nom: row[0]?.value?.toString() ?? '',
-            prenom: row[1]?.value?.toString() ?? '',
-            email: row[2]?.value?.toString() ?? '',
-            role: UserRole.ETUDIANT,
-            matricule: row[3]?.value?.toString() ?? '',
-            classeId: row.length > 4 ? row[4]?.value?.toString() ?? '' : '',
-            niveau: row.length > 5 ? row[5]?.value?.toString() ?? '' : '',
-            parcours: row.length > 6 ? row[6]?.value?.toString() ?? '' : '',
-          );
-
-          if (student.email.isNotEmpty && student.nom.isNotEmpty) {
-            students.add(student);
-          }
-        }
-
-        if (students.isEmpty) {
-          AppUtils.showErrorToast("Aucun étudiant valide trouvé dans le Excel");
-          return;
-        }
-
-        _confirmBulkImport(context, students);
       }
     } catch (e) {
-      AppUtils.showErrorToast("Erreur lors de l'import Excel: $e");
+      Get.back(); // Sécurité
+      AppUtils.showErrorToast("Erreur lors de la sélection : $e");
     }
   }
 
-  void _confirmBulkImport(
-    BuildContext context,
-    List<UserModel> students,
-  ) async {
+  void _confirmBulkImport(BuildContext context, List<UserModel> students) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text(
-              "Confirmer l'import",
-              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.group_add_rounded, color: AppColors.primary),
+            const SizedBox(width: 10),
+            Text("Confirmer l'import", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Voulez-vous importer ${students.length} étudiant(s) ?"),
+            const SizedBox(height: 8),
+            Text(
+              "Note: Les emails invalides ou les lignes incomplètes ont été automatiquement ignorés.",
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontStyle: FontStyle.italic),
             ),
-            content: Text(
-              "Voulez-vous importer ${students.length} étudiant(s) via l'API bulk ?",
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: Text(
-                  "Annuler",
-                  style: TextStyle(color: AppColors.textSecondary),
-                ),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                ),
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text(
-                  "Importer tout",
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text("Annuler", style: TextStyle(color: AppColors.textSecondary)),
           ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text("Importer", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
 
     if (confirmed == true) {
       AppUtils.showLoading("Importation massive en cours...");
       final success = await controller.addUsersBulk(students);
-      Get.back(); // Close loading
+      Get.back();
 
       if (success) {
-        AppUtils.showSuccessToast(
-          "${students.length} étudiant(s) importé(s) avec succès",
-        );
-      } else {
-        AppUtils.showErrorToast(
-          "L'importation massive a échoué sur le serveur",
-        );
+        AppUtils.showSuccessToast("${students.length} étudiant(s) ajoutés !");
       }
-    }
-  }
-
-  void _importStudentsFromCSV(BuildContext context) async {
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
-        withData: true,
-      );
-
-      if (result != null && result.files.first.bytes != null) {
-        final input = String.fromCharCodes(result.files.first.bytes!);
-        final fields = const CsvToListConverter().convert(input);
-
-        if (fields.isEmpty || fields.length <= 1) {
-          AppUtils.showErrorToast("Le fichier CSV est vide");
-          return;
-        }
-
-        List<UserModel> students = [];
-        final dataRows = fields.sublist(1);
-
-        for (var row in dataRows) {
-          if (row.length < 3) continue;
-
-          final student = UserModel(
-            id: '',
-            nom: row[0].toString(),
-            prenom: row[1].toString(),
-            email: row[2].toString(),
-            role: UserRole.ETUDIANT,
-            matricule: row.length > 3 ? row[3].toString() : '',
-            classeId: row.length > 4 ? row[4].toString() : '',
-            niveau: row.length > 5 ? row[5].toString() : '',
-            parcours: row.length > 6 ? row[6].toString() : '',
-          );
-
-          if (student.email.isNotEmpty) {
-            students.add(student);
-          }
-        }
-
-        if (students.isEmpty) {
-          AppUtils.showErrorToast("Aucun étudiant valide trouvé dans le CSV");
-          return;
-        }
-
-        _confirmBulkImport(context, students);
-      }
-    } catch (e) {
-      AppUtils.showErrorToast("Erreur lors de l'import CSV: $e");
     }
   }
 }

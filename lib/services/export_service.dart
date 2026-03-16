@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -12,6 +13,8 @@ import 'package:excel/excel.dart' as excel_lib;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:csv/csv.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:share_plus/share_plus.dart';
 
 class ExportService {
   // Méthode générique pour télécharger un fichier
@@ -68,14 +71,16 @@ class ExportService {
         String extension;
 
         final lowerFormat = format.toLowerCase();
+        
+        // --- NOUVEAU : Nettoyage des données ---
+        List<List<dynamic>> rows = _processRawData(response.body);
 
-        // Si le backend renvoie du CSV mais que l'utilisateur veut un autre format
         if (lowerFormat == 'excel' || lowerFormat == 'xlsx') {
           extension = 'xlsx';
-          finalBytes = _convertCsvToExcel(response.body);
+          finalBytes = _convertRowsToExcel(rows);
         } else if (lowerFormat == 'pdf') {
           extension = 'pdf';
-          finalBytes = await _convertCsvToPdf(response.body, fileName);
+          finalBytes = await _convertRowsToPdf(rows, fileName);
         } else {
           extension = 'csv';
           finalBytes = response.bodyBytes;
@@ -92,8 +97,12 @@ class ExportService {
           "Sauvegardé : Téléchargements/PresenS/$finalFileName",
           backgroundColor: Colors.green,
           colorText: Colors.white,
-          duration: const Duration(seconds: 5),
+          duration: const Duration(seconds: 4),
         );
+
+        // Déclencher le partage automatiquement
+        await Share.shareXFiles([XFile(file.path)], text: 'Rapport PresenS $finalFileName');
+        
         return true;
       } else {
         print('❌ Échec de l\'exportation [${response.statusCode}]: ${response.body}');
@@ -276,11 +285,11 @@ class ExportService {
 
         if (lowerFormat == 'excel' || lowerFormat == 'xlsx') {
           extension = 'xlsx';
-          finalBytes = _convertCsvToExcel(response.body);
+          finalBytes = _convertRowsToExcel(_processRawData(response.body));
         } else if (lowerFormat == 'pdf') {
           extension = 'pdf';
-          finalBytes = await _convertCsvToPdf(
-            response.body,
+          finalBytes = await _convertRowsToPdf(
+            _processRawData(response.body),
             "Rapport_Presence_$sessionId",
           );
         } else {
@@ -320,77 +329,207 @@ class ExportService {
     }
   }
 
-  // Helper pour convertir CSV en Excel (.xlsx)
-  Uint8List _convertCsvToExcel(String csvData) {
-    var excel = excel_lib.Excel.createExcel();
-    var sheet = excel['Sheet1'];
+  // --- HELPERS DE TRAITEMENT DES DONNÉES ---
 
-    List<List<dynamic>> rows = const CsvToListConverter().convert(csvData);
+  // Nettoie la réponse JSON pour extraire uniquement les lignes de données
+  List<List<dynamic>> _processRawData(String rawBody) {
+    try {
+      final decoded = jsonDecode(rawBody);
+      
+      // Si c'est un Map avec une clé 'data' (format standard de votre API)
+      if (decoded is Map && decoded.containsKey('data')) {
+        final data = decoded['data'];
+        
+        if (data is List) {
+          if (data.isEmpty) return [];
+          
+          // 1. Extraire les clés du premier objet pour faire les en-têtes
+          List<String> rawHeaders = (data.first as Map<String, dynamic>).keys.toList();
+          List<String> cleanHeaders = rawHeaders.map((h) => _beautifyHeader(h)).toList();
+          
+          List<List<dynamic>> rows = [cleanHeaders];
+          
+          // 2. Extraire les valeurs pour chaque ligne
+          for (var item in data) {
+            if (item is Map) {
+              rows.add(rawHeaders.map((key) => item[key] ?? "").toList());
+            }
+          }
+          return rows;
+        } else if (data is String) {
+          // Si 'data' contient déjà du CSV
+          return const CsvToListConverter(fieldDelimiter: ",").convert(data);
+        }
+      }
+      
+      // Si c'est directement une liste d'objets
+      if (decoded is List) {
+        if (decoded.isEmpty) return [];
+        List<String> rawHeaders = (decoded.first as Map<String, dynamic>).keys.toList();
+        List<List<dynamic>> rows = [rawHeaders.map((h) => _beautifyHeader(h)).toList()];
+        for (var item in decoded) {
+          rows.add(rawHeaders.map((key) => item[key] ?? "").toList());
+        }
+        return rows;
+      }
+    } catch (e) {
+      print("Pas un format JSON standard, essai de lecture CSV brute : $e");
+    }
+
+    // Par défaut, traite comme du CSV brut
+    String separator = rawBody.contains(";") ? ";" : ",";
+    return CsvToListConverter(fieldDelimiter: separator).convert(rawBody);
+  }
+
+  // Transforme les clés techniques en titres lisibles
+  String _beautifyHeader(String key) {
+    switch (key.toLowerCase()) {
+      case 'id': return 'ID';
+      case 'nom': return 'NOM';
+      case 'prenom': return 'PRÉNOM';
+      case 'email': return 'E-MAIL';
+      case 'role': return 'RÔLE';
+      case 'classe': return 'CLASSE';
+      case 'matiere': return 'MATIÈRE';
+      case 'presence': return 'STATUT';
+      case 'date': return 'DATE';
+      case 'heure': return 'HEURE';
+      case 'telephone': return 'TÉLÉPHONE';
+      default: return key.toUpperCase().replaceAll('_', ' ');
+    }
+  }
+
+  // --- CONVERTISSEURS ---
+
+  // Version améliorée qui prend directement des lignes traitées
+  Uint8List _convertRowsToExcel(List<List<dynamic>> rows) {
+    if (rows.isEmpty) return Uint8List(0);
+
+    var excel = excel_lib.Excel.createExcel();
+    excel.delete('Sheet1');
+    var sheet = excel['Rapport'];
+
+    var titleStyle = excel_lib.CellStyle(
+      fontSize: 18,
+      bold: true,
+      fontColorHex: excel_lib.ExcelColor.fromHexString("#1E293B"),
+      verticalAlign: excel_lib.VerticalAlign.Center,
+    );
+
+    var headerStyle = excel_lib.CellStyle(
+      backgroundColorHex: excel_lib.ExcelColor.fromHexString("#2C3E50"),
+      fontColorHex: excel_lib.ExcelColor.fromHexString("#FFFFFF"),
+      bold: true,
+      horizontalAlign: excel_lib.HorizontalAlign.Center,
+      verticalAlign: excel_lib.VerticalAlign.Center,
+      leftBorder: excel_lib.Border(borderStyle: excel_lib.BorderStyle.Thin),
+      rightBorder: excel_lib.Border(borderStyle: excel_lib.BorderStyle.Thin),
+      topBorder: excel_lib.Border(borderStyle: excel_lib.BorderStyle.Thin),
+      bottomBorder: excel_lib.Border(borderStyle: excel_lib.BorderStyle.Thin),
+    );
+
+    var dataStyle = excel_lib.CellStyle(
+      horizontalAlign: excel_lib.HorizontalAlign.Left,
+      verticalAlign: excel_lib.VerticalAlign.Center,
+      leftBorder: excel_lib.Border(borderStyle: excel_lib.BorderStyle.Thin),
+      rightBorder: excel_lib.Border(borderStyle: excel_lib.BorderStyle.Thin),
+      topBorder: excel_lib.Border(borderStyle: excel_lib.BorderStyle.Thin),
+      bottomBorder: excel_lib.Border(borderStyle: excel_lib.BorderStyle.Thin),
+    );
+
+    // Titre de la feuille (Ligne 0)
+    sheet.merge(
+      excel_lib.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0),
+      excel_lib.CellIndex.indexByColumnRow(columnIndex: rows[0].length - 1, rowIndex: 0),
+    );
+    var titleCell = sheet.cell(excel_lib.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0));
+    titleCell.value = excel_lib.TextCellValue("PRESENS - RAPPORT D'ACTIVITÉ");
+    titleCell.cellStyle = titleStyle;
+    sheet.setRowHeight(0, 30);
+
+    // Date de génération (Ligne 1)
+    var dateCell = sheet.cell(excel_lib.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 1));
+    dateCell.value = excel_lib.TextCellValue("Généré le: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year} à ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}");
+
+    int startRow = 3; // On laisse une ligne vide puis on commence les en-têtes à la ligne 4 (index 3)
 
     for (var i = 0; i < rows.length; i++) {
       for (var j = 0; j < rows[i].length; j++) {
-        var cell = sheet.cell(
-          excel_lib.CellIndex.indexByColumnRow(columnIndex: j, rowIndex: i),
-        );
+        var cell = sheet.cell(excel_lib.CellIndex.indexByColumnRow(columnIndex: j, rowIndex: i + startRow));
         cell.value = excel_lib.TextCellValue(rows[i][j].toString());
+
+        if (i == 0) {
+          cell.cellStyle = headerStyle;
+        } else {
+          cell.cellStyle = dataStyle;
+        }
       }
+      sheet.setRowHeight(i + startRow, 20);
     }
 
-    final bytes = excel.save();
-    return Uint8List.fromList(bytes!);
+    // Auto-ajuster les colonnes
+    for (var j = 0; j < rows[0].length; j++) {
+      sheet.setColumnAutoFit(j);
+    }
+
+    return Uint8List.fromList(excel.save()!);
   }
 
-  // Helper pour convertir CSV en PDF
-  Future<Uint8List> _convertCsvToPdf(String csvData, String title) async {
+  // Version améliorée pour le PDF
+  Future<Uint8List> _convertRowsToPdf(List<List<dynamic>> rows, String title) async {
     final pdf = pw.Document();
-    List<List<dynamic>> rows = const CsvToListConverter().convert(csvData);
+
+    pw.MemoryImage? logoImage;
+    try {
+      final ByteData data = await rootBundle.load('assets/images/logo.png');
+      logoImage = pw.MemoryImage(data.buffer.asUint8List());
+    } catch (e) {}
 
     if (rows.isEmpty) return Uint8List(0);
 
+    final List<String> headers = rows.first.map((e) => e.toString()).toList();
+    final List<List<String>> data = rows.skip(1).map((row) => row.map((e) => e.toString()).toList()).toList();
+
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(32),
-        build:
-            (context) => [
-              pw.Header(
-                level: 0,
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text(
-                      title.replaceAll('_', ' '),
-                      style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                    pw.Text(DateTime.now().toString().split('.')[0]),
-                  ],
-                ),
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(30),
+        build: (context) => [
+          // En-tête
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Row(
+                children: [
+                  if (logoImage != null) pw.Container(width: 40, height: 40, child: pw.Image(logoImage)),
+                  pw.SizedBox(width: 10),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text("PRESENS - GESTION D'ASSIDUITÉ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                      pw.Text(title.replaceAll('_', ' '), style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900)),
+                    ],
+                  ),
+                ],
               ),
-              pw.SizedBox(height: 20),
-              pw.TableHelper.fromTextArray(
-                headerStyle: pw.TextStyle(
-                  fontWeight: pw.FontWeight.bold,
-                  color: PdfColors.white,
-                ),
-                headerDecoration: const pw.BoxDecoration(
-                  color: PdfColors.blueGrey800,
-                ),
-                cellHeight: 30,
-                cellAlignments: {
-                  0: pw.Alignment.centerLeft,
-                  1: pw.Alignment.centerLeft,
-                },
-                data:
-                    rows
-                        .map(
-                          (row) => row.map((cell) => cell.toString()).toList(),
-                        )
-                        .toList(),
-              ),
+              pw.Text("Généré le: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}"),
             ],
+          ),
+          pw.Divider(thickness: 2, color: PdfColors.blueGrey800),
+          pw.SizedBox(height: 20),
+
+          // Tableau
+          pw.TableHelper.fromTextArray(
+            headers: headers,
+            data: data,
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+            cellStyle: const pw.TextStyle(fontSize: 9),
+            cellHeight: 25,
+            oddRowDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
+            cellAlignments: {for (var i = 0; i < headers.length; i++) i: pw.Alignment.centerLeft},
+          ),
+        ],
       ),
     );
 
