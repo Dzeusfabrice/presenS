@@ -72,4 +72,8 @@ Exécution : flutter run
 
 Développé par le Groupe 14 avec la passion de transformer l’expérience académique.
 
+<<<<<<< HEAD
 © 2026 PresenS - Tous droits réservés.
+=======
+© 2026 PresenS - Tous droits réservés.
+>>>>>>> cb992f8df172836be0f7d499732b8287f44e200a
