@@ -1,6 +1,6 @@
 class AppStrings {
   // Common
-  static const String appName = "Chrono";
+  static const String appName = "presenS";
   static const String error = "Erreur";
   static const String success = "Succès";
   static const String attention = "Attention";
@@ -22,7 +22,7 @@ class AppStrings {
 
   // Auth - Login
   static const String loginTitle = "Connexion";
-  static const String loginSubtitle = "Identifiez-vous pour accéder à Chrono";
+  static const String loginSubtitle = "Identifiez-vous pour accéder à presenS";
   static const String emailHint = "Email";
   static const String passwordHint = "Mot de passe";
   static const String forgotPassword = "Mot de passe oublié ?";

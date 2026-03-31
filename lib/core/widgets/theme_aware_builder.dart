@@ -1,4 +1,4 @@
-import 'package:chrono/controllers/theme_controller.dart';
+import 'package:presens/controllers/theme_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 

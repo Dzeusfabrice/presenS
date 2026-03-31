@@ -1,15 +1,15 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:chrono/core/utils/diviceManager.dart';
+import 'package:presens/core/utils/diviceManager.dart';
 import 'package:http/http.dart' as http;
 import '../core/api/logged_http_client.dart';
 import '../core/api/api_endpoints.dart';
-import '../core/utils/app_utils.dart';
-import '../models/user_model.dart';
+import 'package:presens/core/utils/app_utils.dart';
+import 'package:presens/models/user_model.dart';
 import '../models/location_model.dart';
 import '../models/session_model.dart';
 import '../models/attendance_model.dart';
-import '../models/class_model.dart';
+import 'package:presens/models/class_model.dart';
 import '../models/academic_models.dart';
 import 'mock_data_service.dart';
 

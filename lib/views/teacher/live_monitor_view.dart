@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:chrono/core/utils/app_utils.dart';
+import 'package:presens/core/utils/app_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../controllers/session_controller.dart';
